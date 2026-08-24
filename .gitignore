@@ -32,9 +32,13 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.local.example
 
 # vercel
 .vercel
+
+# stray local Expo dev-server cache — not an Expo project, safe to ignore
+.expo
 
 # typescript
 *.tsbuildinfo
