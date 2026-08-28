@@ -116,6 +116,15 @@ export function VibeCodingPanel({
     setDevDescription(text);
   }
 
+  const curlCommand = useMemo(() => {
+    if (!selectedId || sourceType !== "issue" || !apiToken) return null;
+    const origin = process.env.NEXT_PUBLIC_APP_URL || (typeof window !== "undefined" ? window.location.origin : "");
+    return `curl -X POST ${origin}/api/vibe-coding/issues/${selectedId} \\
+  -H "Authorization: Bearer ${apiToken}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"summary": "Describe what you changed here"}'`;
+  }, [selectedId, sourceType, apiToken]);
+
   // Dynamic import — jsPDF only runs inside this click handler, never at
   // module load time, so there's no risk of it touching browser globals
   // during SSR just because this component happens to be mounted.
@@ -127,7 +136,17 @@ export function VibeCodingPanel({
       const doc = new jsPDF();
       const margin = 15;
       const maxWidth = doc.internal.pageSize.getWidth() - margin * 2;
-      const lines = doc.splitTextToSize(devDescription, maxWidth);
+
+      // Appended below the description (not mixed in) so a re-generated
+      // PDF still reads as "the description, then the callback" rather
+      // than blending the two — curlCommand is only set for issues
+      // (sourceType === "issue"), so features/suggestions get a
+      // description-only PDF same as before.
+      const fullText = curlCommand
+        ? `${devDescription}\n\n--- When you're done, run this to report back ---\n${curlCommand}`
+        : devDescription;
+
+      const lines = doc.splitTextToSize(fullText, maxWidth);
       doc.setFontSize(11);
       doc.text(lines, margin, 20);
       doc.save(`dev-description-${Date.now()}.pdf`);
@@ -135,15 +154,6 @@ export function VibeCodingPanel({
       setGenerating(false);
     }
   }
-
-  const curlCommand = useMemo(() => {
-    if (!selectedId || sourceType !== "issue" || !apiToken) return null;
-    const origin = process.env.NEXT_PUBLIC_APP_URL || (typeof window !== "undefined" ? window.location.origin : "");
-    return `curl -X POST ${origin}/api/vibe-coding/issues/${selectedId} \\
-  -H "Authorization: Bearer ${apiToken}" \\
-  -H "Content-Type: application/json" \\
-  -d '{"summary": "Describe what you changed here"}'`;
-  }, [selectedId, sourceType, apiToken]);
 
   function copyCurlCommand() {
     if (!curlCommand) return;
