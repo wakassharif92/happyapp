@@ -10,7 +10,6 @@ import { createClient } from "@/lib/supabase/client";
 import type { BoardIssue, FeatureRequestKind, SupportMessage } from "@/lib/types/database";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { TopBar, type AddKind } from "@/components/dashboard/TopBar";
-import { TabNav } from "@/components/dashboard/TabNav";
 import { IssueCard } from "@/components/dashboard/IssueCard";
 import { IssueDetailPanel } from "@/components/dashboard/IssueDetailPanel";
 import { TicketConversationModal } from "@/components/dashboard/TicketConversationModal";
@@ -415,9 +414,7 @@ export function DashboardClient({
         />
 
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">
-          <TabNav activeView={activeView} onViewChange={setActiveView} counts={counts} />
-
-          <div className="mt-4">
+          <div>
             {isTabKey(activeView) ? (
               <div className="flex flex-col gap-3">
                 {visibleIssues.length === 0 ? (
@@ -448,11 +445,7 @@ export function DashboardClient({
             ) : activeView === "personal_tasks" ? (
               <PersonalTasksPanel projects={initialProjects} />
             ) : (
-              <VibeCodingPanel
-                projectId={currentProjectId}
-                issues={projectIssues}
-                onSendToAiFix={(issueId) => handleMove(issueId, "ai_fix")}
-              />
+              <VibeCodingPanel projectId={currentProjectId} issues={projectIssues} />
             )}
           </div>
         </main>
