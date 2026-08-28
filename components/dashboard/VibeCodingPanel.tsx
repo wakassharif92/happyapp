@@ -158,31 +158,102 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
   // Dynamic import — jsPDF only runs inside this click handler, never at
   // module load time, so there's no risk of it touching browser globals
   // during SSR just because this component happens to be mounted.
+  //
+  // Laid out as an actual document (title page, an explicit "confirm
+  // before executing" instruction for the AI, then one heading-led
+  // section per item — a fresh page per item once there's more than one)
+  // rather than one long unbroken paragraph dump.
   async function handleGeneratePdf() {
     const selected = items.filter((i) => selectedIds.has(i.id));
     if (selected.length === 0) return;
     setGenerating(true);
     try {
-      const sections = await Promise.all(
-        selected.map(async (item) => {
-          const description = descriptionEdits.get(item.id) ?? (await fetchComposedText(item));
-          const curl = item.kind === "issue" ? buildCurlCommand(item.id) : null;
-          const text = curl
-            ? `${description}\n\n--- When you're done, run this to report back ---\n${curl}`
-            : description;
-          return `${item.title}\n${"=".repeat(item.title.length)}\n${text}`;
-        })
+      const resolved = await Promise.all(
+        selected.map(async (item) => ({
+          item,
+          description: descriptionEdits.get(item.id) ?? (await fetchComposedText(item)),
+          curl: item.kind === "issue" ? buildCurlCommand(item.id) : null,
+        }))
       );
-      const fullText = sections.join("\n\n\n");
 
       const { jsPDF } = await import("jspdf");
       const doc = new jsPDF();
       const margin = 15;
       const maxWidth = doc.internal.pageSize.getWidth() - margin * 2;
-      const lines = doc.splitTextToSize(fullText, maxWidth);
-      doc.setFontSize(11);
-      doc.text(lines, margin, 20);
-      doc.save(`dev-description-${Date.now()}.pdf`);
+      const pageHeight = doc.internal.pageSize.getHeight();
+      let y = margin;
+
+      function ensureSpace(lines: number, lineHeight: number) {
+        if (y + lines * lineHeight > pageHeight - margin) {
+          doc.addPage();
+          y = margin;
+        }
+      }
+
+      function addHeading(text: string, size: number) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(size);
+        const lines = doc.splitTextToSize(text, maxWidth);
+        ensureSpace(lines.length, size * 0.5);
+        doc.text(lines, margin, y);
+        y += lines.length * (size * 0.5) + 3;
+      }
+
+      function addBody(text: string, opts: { font?: "helvetica" | "courier"; size?: number } = {}) {
+        const font = opts.font ?? "helvetica";
+        const size = opts.size ?? 10.5;
+        doc.setFont(font, "normal");
+        doc.setFontSize(size);
+        const lines = doc.splitTextToSize(text, maxWidth);
+        for (const line of lines) {
+          ensureSpace(1, size * 0.5);
+          doc.text(line, margin, y);
+          y += size * 0.5;
+        }
+        y += 3;
+      }
+
+      addHeading("HappyApp — Vibe Coding Export", 16);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(130);
+      doc.text(new Date().toLocaleString(), margin, y);
+      doc.setTextColor(0);
+      y += 9;
+
+      addHeading("Instructions for AI", 12);
+      addBody(
+        "Before making any changes, read through every item below and confirm your " +
+          "understanding of the requirements back to the user first. Do not begin " +
+          "implementing or executing anything until the user has explicitly confirmed " +
+          "your understanding is correct."
+      );
+      y += 3;
+
+      const counters: Record<PickerItem["kind"], number> = { issue: 0, feature: 0, suggestion: 0 };
+      const kindLabel: Record<PickerItem["kind"], string> = {
+        issue: "Issue",
+        feature: "Feature",
+        suggestion: "Suggestion",
+      };
+
+      resolved.forEach(({ item, description, curl }, index) => {
+        counters[item.kind] += 1;
+        if (index > 0) {
+          doc.addPage();
+          y = margin;
+        }
+        addHeading(`${kindLabel[item.kind]} ${counters[item.kind]}: ${item.title}`, 14);
+        addHeading("Details", 10.5);
+        addBody(description);
+        if (curl) {
+          y += 2;
+          addHeading("Report back (run this once the fix is made)", 10.5);
+          addBody(curl, { font: "courier", size: 9 });
+        }
+      });
+
+      doc.save(`vibe-coding-export-${Date.now()}.pdf`);
     } finally {
       setGenerating(false);
     }
