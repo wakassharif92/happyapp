@@ -12,6 +12,7 @@ import {
   IconLink,
   IconMegaphone,
   IconSparkles,
+  IconUsers,
 } from "./icons";
 
 const TAB_ICONS: Record<TabKey, (props: { className?: string }) => React.ReactElement> = {
@@ -93,6 +94,14 @@ export function Sidebar({
 
       <div className="mt-auto flex flex-col gap-0.5 border-t border-[var(--db-border)] pt-3">
         <SupportNavLink projectId={currentProjectId} />
+        <Link
+          href="/team"
+          title="Team Members"
+          className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-[var(--db-fg-muted)] transition-colors hover:bg-[var(--db-surface-hover)] hover:text-[var(--db-fg)]"
+        >
+          <IconUsers className="h-4 w-4 shrink-0" />
+          <span className="hidden lg:inline">Team Members</span>
+        </Link>
         <Link
           href={`/projects/${currentProjectId}/links`}
           title="Links"

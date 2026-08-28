@@ -321,6 +321,20 @@ export function IconGoogle({ className = base }: IconProps) {
   );
 }
 
+export function IconUsers({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <circle cx="9" cy="8" r="3" stroke="currentColor" strokeWidth="2" />
+      <path
+        d="M3 20c0-3.31 2.69-6 6-6s6 2.69 6 6M16 9a3 3 0 100-6M15 14c2.76 0 5 2.24 5 5v1"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 export function IconInbox({ className = base }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className}>
