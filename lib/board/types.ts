@@ -58,13 +58,18 @@ export type Project = {
   name: string;
 };
 
+// Lifecycle order: a complaint comes in, gets triaged into Pending, moves
+// to In Progress, optionally goes through AI Fix, then lands on Done or
+// Closed. Drives Sidebar.tsx/TabNav.tsx's display order and every
+// "move to…"/status-filter dropdown that iterates this (MoveToMenu.tsx,
+// VibeCodingPanel.tsx) — was previously in an arbitrary order.
 export const TAB_ORDER: TabKey[] = [
+  "user_complaints",
+  "pending",
   "in_progress",
   "ai_fix",
-  "pending",
   "done",
   "closed",
-  "user_complaints",
 ];
 
 export const TAB_LABELS: Record<TabKey, string> = {
@@ -86,12 +91,15 @@ export const TAB_LABELS: Record<TabKey, string> = {
 export type ExtraView = "features" | "suggestions" | "notes" | "personal_tasks" | "vibe_coding";
 export type BoardView = TabKey | ExtraView;
 
+// Vibe Coding first — the tool most tightly coupled to the AI Fix loop
+// directly above it — then ideation (Features/Suggestions), then the
+// most personal/least shared-workflow items last (Notes/Personal Tasks).
 export const EXTRA_VIEW_ORDER: ExtraView[] = [
+  "vibe_coding",
   "features",
   "suggestions",
   "notes",
   "personal_tasks",
-  "vibe_coding",
 ];
 
 export const VIEW_ORDER: BoardView[] = [...TAB_ORDER, ...EXTRA_VIEW_ORDER];
