@@ -19,18 +19,28 @@ type PickerItem = {
 // "For Vibe Coding": check off one or more tracked items (issues at a
 // given workflow stage, features, or suggestions — or everything via the
 // "All" filters), then generate ONE PDF with every checked item's
-// description (and, for issues, that issue's own callback command),
-// ready to hand an external AI coding tool. Each issue's description is
-// composed automatically (original report + any comments since — see
-// buildIssueText) rather than hand-edited here, and there is no manual
-// "send to AI Fix" — that only ever happens when the AI itself calls the
-// callback command after finishing, keeping AI Fix meaning "an AI
-// actually reported a fix attempt," not "a human queued something."
+// description (and, for issues, that issue's own callback command).
+//
+// Checking the box and opening a card are deliberately separate actions
+// (the checkbox stops its own click from bubbling) — tapping the card
+// itself expands it to show an editable "Dev Description" textarea,
+// pre-filled from the original report plus any comments since, so a dev
+// can refine the wording before it goes in the PDF without that also
+// toggling the item in/out of the batch. There is no manual "send to AI
+// Fix" — that only ever happens when the AI itself calls the callback
+// command after finishing, keeping AI Fix meaning "an AI actually
+// reported a fix attempt," not "a human queued something."
 export function VibeCodingPanel({ projectId, issues }: { projectId: string; issues: Issue[] }) {
   const [sourceType, setSourceType] = useState<SourceType>("issue");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [featureItems, setFeatureItems] = useState<FeatureRequest[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  // Per-item Dev Description text, keyed by item id — seeded lazily the
+  // first time a card is expanded, then holds whatever the dev has typed
+  // since. Falls back to a fresh composition at PDF-generation time for
+  // any checked item that was never expanded/edited.
+  const [descriptionEdits, setDescriptionEdits] = useState<Map<string, string>>(new Map());
   const [generating, setGenerating] = useState(false);
   const [apiToken, setApiToken] = useState<string | null>(null);
 
@@ -98,6 +108,43 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
     });
   }
 
+  // Issues carry their verification history as normal comments
+  // (IssueDetailPanel's existing Notes section) — folded in so the
+  // description has the full "why it wasn't fixed" trail, not just the
+  // original report. Features/suggestions have no comment thread.
+  async function fetchComposedText(item: PickerItem): Promise<string> {
+    if (item.kind !== "issue") return item.text;
+    const supabase = createClient();
+    const { data: comments } = await supabase
+      .from("board_issue_comments")
+      .select("author, text, created_at")
+      .eq("issue_id", item.id)
+      .order("created_at", { ascending: true });
+    if (!comments || comments.length === 0) return item.text;
+    const trail = comments
+      .map((c) => `— ${c.author} (${new Date(c.created_at).toLocaleDateString()}): ${c.text}`)
+      .join("\n");
+    return `${item.text}\n\n--- Notes ---\n${trail}`;
+  }
+
+  function toggleExpand(item: PickerItem) {
+    if (expandedId === item.id) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(item.id);
+    if (descriptionEdits.has(item.id)) return;
+    // Seed immediately with the plain text so the textarea isn't empty
+    // while comments load, then replace once they arrive.
+    setDescriptionEdits((prev) => new Map(prev).set(item.id, item.text));
+    fetchComposedText(item).then((text) => {
+      setDescriptionEdits((prev) => {
+        if (prev.get(item.id) !== item.text) return prev; // dev already started typing — don't clobber
+        return new Map(prev).set(item.id, text);
+      });
+    });
+  }
+
   function buildCurlCommand(issueId: string): string | null {
     if (!apiToken) return null;
     const origin =
@@ -106,31 +153,6 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
   -H "Authorization: Bearer ${apiToken}" \\
   -H "Content-Type: application/json" \\
   -d '{"summary": "Describe what you changed here"}'`;
-  }
-
-  // Issues carry their verification history as normal comments
-  // (IssueDetailPanel's existing Notes section) — folded in so the PDF
-  // has the full "why it wasn't fixed" trail, not just the original
-  // report. Features/suggestions have no comment thread.
-  async function buildIssueText(item: PickerItem): Promise<string> {
-    let text = item.text;
-    const supabase = createClient();
-    const { data: comments } = await supabase
-      .from("board_issue_comments")
-      .select("author, text, created_at")
-      .eq("issue_id", item.id)
-      .order("created_at", { ascending: true });
-    if (comments && comments.length > 0) {
-      const trail = comments
-        .map((c) => `— ${c.author} (${new Date(c.created_at).toLocaleDateString()}): ${c.text}`)
-        .join("\n");
-      text = `${text}\n\n--- Notes ---\n${trail}`;
-    }
-    const curl = buildCurlCommand(item.id);
-    if (curl) {
-      text = `${text}\n\n--- When you're done, run this to report back ---\n${curl}`;
-    }
-    return text;
   }
 
   // Dynamic import — jsPDF only runs inside this click handler, never at
@@ -143,7 +165,11 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
     try {
       const sections = await Promise.all(
         selected.map(async (item) => {
-          const text = item.kind === "issue" ? await buildIssueText(item) : item.text;
+          const description = descriptionEdits.get(item.id) ?? (await fetchComposedText(item));
+          const curl = item.kind === "issue" ? buildCurlCommand(item.id) : null;
+          const text = curl
+            ? `${description}\n\n--- When you're done, run this to report back ---\n${curl}`
+            : description;
           return `${item.title}\n${"=".repeat(item.title.length)}\n${text}`;
         })
       );
@@ -170,6 +196,7 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
           onChange={(e) => {
             setSourceType(e.target.value as SourceType);
             setSelectedIds(new Set());
+            setExpandedId(null);
           }}
           className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-700"
         >
@@ -185,6 +212,7 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
             onChange={(e) => {
               setStatusFilter(e.target.value as StatusFilter);
               setSelectedIds(new Set());
+              setExpandedId(null);
             }}
             className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-700"
           >
@@ -211,27 +239,48 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
         {items.length === 0 ? (
           <p className="text-sm text-slate-400">Nothing here yet.</p>
         ) : (
-          items.map((item) => (
-            <label
-              key={item.id}
-              className="card flex cursor-pointer items-center gap-3 p-3.5 transition-colors hover:border-slate-300"
-            >
-              <input
-                type="checkbox"
-                checked={selectedIds.has(item.id)}
-                onChange={() => toggleSelected(item.id)}
-                className="h-4 w-4 shrink-0 rounded border-slate-300"
-              />
-              <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-900">
-                {item.title}
-              </span>
-              {item.kind !== "issue" && (
-                <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs capitalize text-slate-500">
-                  {item.kind}
-                </span>
-              )}
-            </label>
-          ))
+          items.map((item) => {
+            const isExpanded = expandedId === item.id;
+            return (
+              <div key={item.id} className="card overflow-hidden">
+                <div className="flex items-center gap-3 p-3.5">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(item.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={() => toggleSelected(item.id)}
+                    className="h-4 w-4 shrink-0 rounded border-slate-300"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => toggleExpand(item)}
+                    className="min-w-0 flex-1 truncate text-left text-sm font-medium text-slate-900"
+                  >
+                    {item.title}
+                  </button>
+                  {item.kind !== "issue" && (
+                    <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs capitalize text-slate-500">
+                      {item.kind}
+                    </span>
+                  )}
+                </div>
+
+                {isExpanded && (
+                  <div className="flex flex-col gap-1.5 border-t border-slate-100 p-3.5">
+                    <label className="text-xs font-medium text-slate-500">Dev Description</label>
+                    <textarea
+                      value={descriptionEdits.get(item.id) ?? ""}
+                      onChange={(e) =>
+                        setDescriptionEdits((prev) => new Map(prev).set(item.id, e.target.value))
+                      }
+                      rows={8}
+                      className="input font-mono text-sm"
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })
         )}
       </div>
     </div>
