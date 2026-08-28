@@ -36,7 +36,10 @@ export async function triageIssue(
   issue: Issue
 ): Promise<void> {
   const supabase = createAdminClient();
-  await logEvent(supabase, "issue_triage", issue.id, `Starting triage: ${issue.title}`, "info");
+  await logEvent(
+    supabase,
+    project.company_id,
+    "issue_triage", issue.id, `Starting triage: ${issue.title}`, "info");
 
   let bridgeSessionId: string | undefined;
   try {
@@ -44,8 +47,9 @@ export async function triageIssue(
   } catch (err) {
     const message = err instanceof BridgeUnavailableError ? err.message : String(err);
     await logEvent(
-      supabase,
-      "issue_triage",
+    supabase,
+    project.company_id,
+    "issue_triage",
       issue.id,
       `Automation bridge unavailable, proceeding with doc/code review only: ${message}`,
       "info"
@@ -102,6 +106,7 @@ Steps:
     ],
     onUsage: (usage, model) =>
       recordApiUsage(supabase, {
+        companyId: project.company_id,
         projectId: project.id,
         operation: "issue_triage",
         runId: issue.id,
@@ -116,8 +121,9 @@ Steps:
 
   if (result.status === "max_turns_exceeded") {
     await logEvent(
-      supabase,
-      "issue_triage",
+    supabase,
+    project.company_id,
+    "issue_triage",
       issue.id,
       "Triage hit the max-turn safety limit without a verdict.",
       "error"
@@ -145,5 +151,8 @@ Steps:
       .eq("id", issue.id);
   }
 
-  await logEvent(supabase, "issue_triage", issue.id, "Triage complete.", "info");
+  await logEvent(
+    supabase,
+    project.company_id,
+    "issue_triage", issue.id, "Triage complete.", "info");
 }

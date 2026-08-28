@@ -19,10 +19,10 @@ export function TabNav({
             key={tab}
             type="button"
             onClick={() => onTabChange(tab)}
-            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition-all duration-150 ${
               active
-                ? "bg-[var(--db-accent)] text-[var(--db-accent-fg)]"
-                : "bg-[var(--db-surface)] text-[var(--db-fg-muted)] hover:text-[var(--db-fg)] border border-[var(--db-border)]"
+                ? "bg-[var(--db-accent)] text-[var(--db-accent-fg)] shadow-sm shadow-[var(--db-accent)]/30"
+                : "bg-[var(--db-surface)] text-[var(--db-fg-muted)] hover:border-[var(--db-border-strong)] hover:text-[var(--db-fg)] border border-[var(--db-border)]"
             }`}
           >
             {TAB_LABELS[tab]}

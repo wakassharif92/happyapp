@@ -11,6 +11,7 @@ import { calculateCost, type TokenUsage } from "./pricing";
 export async function recordApiUsage(
   supabase: SupabaseClient<Database>,
   params: {
+    companyId: string;
     projectId: string;
     operation: AgentOperation;
     runId?: string | null;
@@ -20,6 +21,7 @@ export async function recordApiUsage(
 ): Promise<void> {
   const costUsd = calculateCost(params.model, params.usage);
   const { error } = await supabase.from("agent_api_calls").insert({
+    company_id: params.companyId,
     project_id: params.projectId,
     operation: params.operation,
     run_id: params.runId ?? null,

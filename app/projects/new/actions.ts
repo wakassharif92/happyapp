@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentCompanyId } from "@/lib/company";
 import type { AppType } from "@/lib/types/database";
 
 export type CreateProjectState = { error?: string } | undefined;
@@ -27,9 +28,11 @@ export async function createProject(
   }
 
   const supabase = await createClient();
+  const companyId = await getCurrentCompanyId();
   const { data, error } = await supabase
     .from("projects")
     .insert({
+      company_id: companyId,
       name,
       description,
       app_type,

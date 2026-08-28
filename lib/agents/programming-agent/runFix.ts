@@ -41,7 +41,10 @@ async function fixOneIssue(
   run: ProgrammingAgentRun,
   issue: Issue
 ): Promise<{ summary: string; completed: boolean }> {
-  await logEvent(supabase, "fix_run", run.id, `Starting fix for "${issue.title}"`, "info");
+  await logEvent(
+    supabase,
+    project.company_id,
+    "fix_run", run.id, `Starting fix for "${issue.title}"`, "info");
 
   const bundle = await buildContextBundle(supabase, project, module, issue);
   const ctx: ProgrammingAgentContext = { supabase, project, runType: "fix_run", runId: run.id };
@@ -76,6 +79,7 @@ Read the relevant file(s) (search_codebase if the guessed relevant_files list ab
     ],
     onUsage: (usage, model) =>
       recordApiUsage(supabase, {
+        companyId: project.company_id,
         projectId: project.id,
         operation: "fix_run",
         runId: run.id,
@@ -86,7 +90,10 @@ Read the relevant file(s) (search_codebase if the guessed relevant_files list ab
 
   if (result.status === "max_turns_exceeded") {
     const summary = "Hit the max-turn safety limit before finishing — left unfixed for manual follow-up.";
-    await logEvent(supabase, "fix_run", run.id, `"${issue.title}": ${summary}`, "error");
+    await logEvent(
+    supabase,
+    project.company_id,
+    "fix_run", run.id, `"${issue.title}": ${summary}`, "error");
     return { summary, completed: false };
   }
 
@@ -101,7 +108,10 @@ Read the relevant file(s) (search_codebase if the guessed relevant_files list ab
     summary = "Agent ended without reporting a result.";
   }
 
-  await logEvent(supabase, "fix_run", run.id, `"${issue.title}": ${summary}`, "fix_applied");
+  await logEvent(
+    supabase,
+    project.company_id,
+    "fix_run", run.id, `"${issue.title}": ${summary}`, "fix_applied");
   return { summary, completed: true };
 }
 
@@ -129,7 +139,10 @@ export async function runFix(
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       summaryLines.push(`- ${issue.title}: FAILED — ${message}`);
-      await logEvent(supabase, "fix_run", run.id, `"${issue.title}" failed: ${message}`, "error");
+      await logEvent(
+    supabase,
+    project.company_id,
+    "fix_run", run.id, `"${issue.title}" failed: ${message}`, "error");
     }
   }
 
@@ -147,8 +160,9 @@ export async function runFix(
       await verifyFix(project, module, { ...issue, status: "fixed", assigned_agent_run_id: run.id });
     } catch (err) {
       await logEvent(
-        supabase,
-        "fix_run",
+    supabase,
+    project.company_id,
+    "fix_run",
         run.id,
         `Re-verification of "${issue.title}" errored: ${err instanceof Error ? err.message : String(err)}`,
         "error"

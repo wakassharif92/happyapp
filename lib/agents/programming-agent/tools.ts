@@ -175,10 +175,11 @@ export function logEventTool(ctx: ProgrammingAgentContext): ToolEntry {
       const { text, event_type } = input as { text: string; event_type?: string };
       await logEvent(
         ctx.supabase,
+        ctx.project.company_id,
         ctx.runType,
         ctx.runId,
         text,
-        (event_type as Parameters<typeof logEvent>[4]) ?? "info"
+        (event_type as Parameters<typeof logEvent>[5]) ?? "info"
       );
       return "ok";
     },

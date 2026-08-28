@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentMember } from "@/lib/company";
 import { SupportInboxClient } from "./SupportInboxClient";
 
 // Section 14: agent-side inbox for the per-project customer support chat
@@ -13,25 +14,26 @@ export default async function SupportInboxPage({
   const { projectId } = await params;
   const supabase = await createClient();
 
-  const [{ data: project }, { data: conversations }, { data: userData }] = await Promise.all([
+  const [{ data: project }, { data: conversations }, member] = await Promise.all([
     supabase.from("projects").select("id, name").eq("id", projectId).maybeSingle(),
     supabase
       .from("support_conversations")
       .select("*")
       .eq("project_id", projectId)
       .order("updated_at", { ascending: false }),
-    supabase.auth.getUser(),
+    getCurrentMember(),
   ]);
 
-  if (!project) notFound();
+  if (!project || !member) notFound();
 
   return (
     <div className="flex h-[calc(100vh-4rem)] w-full flex-col">
       <h1 className="mb-4 text-xl font-semibold">Support — {project.name}</h1>
       <SupportInboxClient
         projectId={projectId}
+        companyId={member.companyId}
         initialConversations={conversations ?? []}
-        agentName={userData.user?.email ?? "Support"}
+        agentName={member.name}
       />
     </div>
   );

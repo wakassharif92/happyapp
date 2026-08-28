@@ -22,10 +22,22 @@ export default async function LinksPage({
 
   if (!project) notFound();
 
-  const headersList = await headers();
-  const host = headersList.get("host");
-  const protocol = host?.startsWith("localhost") ? "http" : "https";
-  const origin = host ? `${protocol}://${host}` : "";
+  // Prefer the stable production domain when set — these links get copied
+  // out and shared externally (a mobile app's code, WhatsApp, etc.), so
+  // they need to stay durable across deploys. Without this, they'd be
+  // built from whichever host actually served the request, which on
+  // Vercel is a per-deployment URL that changes on every deploy (unlike
+  // the OAuth redirect URIs elsewhere in this app, which deliberately
+  // stay request-derived — see lib/slack/requestOrigin.ts /
+  // lib/auth/publicOrigin.ts — since those must match the exact origin
+  // the flow actually ran on, not a fixed alias).
+  let origin = process.env.NEXT_PUBLIC_APP_URL;
+  if (!origin) {
+    const headersList = await headers();
+    const host = headersList.get("host");
+    const protocol = host?.startsWith("localhost") ? "http" : "https";
+    origin = host ? `${protocol}://${host}` : "";
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-6">

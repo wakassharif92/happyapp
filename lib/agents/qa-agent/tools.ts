@@ -186,6 +186,7 @@ export function createIssueTool(ctx: QaAgentContext): ToolEntry {
       const { data, error } = await ctx.supabase
         .from("issues")
         .insert({
+          company_id: ctx.project.company_id,
           source: "automated",
           module_id: ctx.module.id,
           test_case_id: ctx.testCaseId ?? null,
@@ -201,7 +202,7 @@ export function createIssueTool(ctx: QaAgentContext): ToolEntry {
         .single();
       if (error) return `Error: ${error.message}`;
       const { runType, runId } = requireRun(ctx);
-      await logEvent(ctx.supabase, runType, runId, `Bug found: ${body.title}`, "bug_found");
+      await logEvent(ctx.supabase, ctx.project.company_id, runType, runId, `Bug found: ${body.title}`, "bug_found");
       return JSON.stringify({ issue_id: data.id });
     },
   };
@@ -274,10 +275,11 @@ export function logEventTool(ctx: QaAgentContext): ToolEntry {
       const { runType, runId } = requireRun(ctx);
       await logEvent(
         ctx.supabase,
+        ctx.project.company_id,
         runType,
         runId,
         text,
-        (event_type as Parameters<typeof logEvent>[4]) ?? "info"
+        (event_type as Parameters<typeof logEvent>[5]) ?? "info"
       );
       return "ok";
     },

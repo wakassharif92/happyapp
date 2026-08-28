@@ -99,13 +99,11 @@ export default function NewProjectPage() {
           />
         </Field>
 
-        <Field
-          label={
-            appType === "mobile"
-              ? "Appium bridge URL"
-              : "Base URL Playwright should open"
-          }
-        >
+        {/* Automation bridge URL (automation_target) hidden from this form
+            by request — it's only relevant to the old QA Agent automated-
+            testing pipeline, not the main HappyApp flow (Issue Board,
+            Support Chat, Team Reports). Uncomment to bring it back:
+        <Field label="Automation bridge URL (optional, advanced)">
           <input
             name="automation_target"
             className="input"
@@ -116,6 +114,7 @@ export default function NewProjectPage() {
             }
           />
         </Field>
+        */}
 
         {state?.error && (
           <p className="text-sm text-red-600 dark:text-red-400">

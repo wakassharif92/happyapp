@@ -45,6 +45,12 @@ export type Issue = {
   createdAt: string;
   comments: Comment[];
   activity: ActivityEntry[];
+  // Set only for tickets sent from the Support Chat's "Send case to devs"
+  // (Section 16) — lets the detail panel show a link back to the customer
+  // conversation this issue came from.
+  ticketNumber: number | null;
+  supportConversationId: string | null;
+  devLastReadAt: string | null;
 };
 
 export type Project = {

@@ -56,7 +56,12 @@ export async function POST(
 
   const { data: run, error } = await supabase
     .from("test_runs")
-    .insert({ module_id: moduleId, status: "running", total_cases: cases.length })
+    .insert({
+      company_id: project.company_id,
+      module_id: moduleId,
+      status: "running",
+      total_cases: cases.length,
+    })
     .select()
     .single();
   if (error || !run) {

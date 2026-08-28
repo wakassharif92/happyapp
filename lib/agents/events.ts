@@ -6,12 +6,14 @@ import type { AgentEventType, AgentRunType, Database } from "@/lib/types/databas
 // dashboard's live activity feed and the audit trail both read from one place.
 export async function logEvent(
   supabase: SupabaseClient<Database>,
+  companyId: string,
   runType: AgentRunType,
   runId: string,
   eventText: string,
   eventType: AgentEventType = "info"
 ): Promise<void> {
   await supabase.from("agent_events").insert({
+    company_id: companyId,
     run_type: runType,
     run_id: runId,
     event_text: eventText,

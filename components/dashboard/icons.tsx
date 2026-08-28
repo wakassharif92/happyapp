@@ -251,6 +251,76 @@ export function IconPlug({ className = base }: IconProps) {
   );
 }
 
+export function IconEdit({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path
+        d="M4 20h4l10.5-10.5a2.121 2.121 0 00-3-3L5 17v3z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M13.5 7.5l3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function IconTicket({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path
+        d="M3 8a2 2 0 012-2h14a2 2 0 012 2v2a2 2 0 000 4v2a2 2 0 01-2 2H5a2 2 0 01-2-2v-2a2 2 0 000-4V8z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+      <path d="M10 6v12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeDasharray="2 3" />
+    </svg>
+  );
+}
+
+export function IconSend({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path
+        d="M4 11l16-7-6 16-3-7-7-2z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+// The real, multi-color Google "G" mark — unlike every other icon in this
+// file, this one is brand-specific (Google's own guidelines require using
+// its actual colors, not a currentColor outline) so it doesn't follow the
+// stroke="currentColor" convention above.
+export function IconGoogle({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className}>
+      <path
+        d="M23.49 12.27c0-.79-.07-1.54-.2-2.27H12v4.51h6.47c-.28 1.48-1.13 2.73-2.4 3.58v2.98h3.88c2.27-2.09 3.58-5.17 3.58-8.8z"
+        fill="#4285F4"
+      />
+      <path
+        d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-2.98c-1.07.72-2.45 1.15-4.05 1.15-3.11 0-5.75-2.1-6.69-4.93H1.29v3.07C3.26 21.3 7.31 24 12 24z"
+        fill="#34A853"
+      />
+      <path
+        d="M5.31 14.33A7.2 7.2 0 014.91 12c0-.81.14-1.6.4-2.33V6.6H1.29A11.98 11.98 0 000 12c0 1.93.46 3.76 1.29 5.4l4.02-3.07z"
+        fill="#FBBC05"
+      />
+      <path
+        d="M12 4.75c1.76 0 3.34.61 4.58 1.79l3.44-3.44C17.94 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.6l4.02 3.07C6.25 6.85 8.89 4.75 12 4.75z"
+        fill="#EA4335"
+      />
+    </svg>
+  );
+}
+
 export function IconInbox({ className = base }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className}>

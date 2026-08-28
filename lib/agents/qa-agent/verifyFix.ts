@@ -37,7 +37,10 @@ export async function verifyFix(project: Project, module: Module, issue: Issue):
   const runId = issue.assigned_agent_run_id;
   if (!runId) throw new Error("Issue has no assigned_agent_run_id to log re-verification against.");
 
-  await logEvent(supabase, "fix_run", runId, `Re-verifying "${issue.title}"…`, "info");
+  await logEvent(
+    supabase,
+    project.company_id,
+    "fix_run", runId, `Re-verifying "${issue.title}"…`, "info");
 
   let testCaseScenario: string | null = null;
   if (issue.test_case_id) {
@@ -54,7 +57,10 @@ export async function verifyFix(project: Project, module: Module, issue: Issue):
     bridgeSessionId = await createBridgeSession(project);
   } catch (err) {
     const message = err instanceof BridgeUnavailableError ? err.message : String(err);
-    await logEvent(supabase, "fix_run", runId, `Cannot re-verify — bridge unavailable: ${message}`, "error");
+    await logEvent(
+    supabase,
+    project.company_id,
+    "fix_run", runId, `Cannot re-verify — bridge unavailable: ${message}`, "error");
     return;
   }
 
@@ -98,6 +104,7 @@ Use automation_action / get_dom_or_accessibility_tree to check. Call record_veri
     ],
     onUsage: (usage, model) =>
       recordApiUsage(supabase, {
+        companyId: project.company_id,
         projectId: project.id,
         operation: "verify_fix",
         runId,
@@ -130,7 +137,10 @@ Use automation_action / get_dom_or_accessibility_tree to check. Call record_veri
         .update({ status: "pass", last_run_at: new Date().toISOString() })
         .eq("id", issue.test_case_id);
     }
-    await logEvent(supabase, "fix_run", runId, `"${issue.title}": verified fixed.`, "pass");
+    await logEvent(
+    supabase,
+    project.company_id,
+    "fix_run", runId, `"${issue.title}": verified fixed.`, "pass");
   } else {
     const { data: current } = await supabase
       .from("issues")
@@ -148,6 +158,9 @@ Use automation_action / get_dom_or_accessibility_tree to check. Call record_veri
         .update({ status: "fail", last_run_at: new Date().toISOString() })
         .eq("id", issue.test_case_id);
     }
-    await logEvent(supabase, "fix_run", runId, `"${issue.title}": still failing after fix — reverted to triaged.`, "fail");
+    await logEvent(
+    supabase,
+    project.company_id,
+    "fix_run", runId, `"${issue.title}": still failing after fix — reverted to triaged.`, "fail");
   }
 }

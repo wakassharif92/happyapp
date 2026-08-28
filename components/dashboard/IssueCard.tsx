@@ -13,6 +13,7 @@ import { IconCopy, IconExpand } from "./icons";
 
 export function IssueCard({
   issue,
+  hasUnreadDevReply = false,
   onOpenDetail,
   onCategoryChange,
   onMove,
@@ -20,6 +21,7 @@ export function IssueCard({
   onConvertToDev,
 }: {
   issue: Issue;
+  hasUnreadDevReply?: boolean;
   onOpenDetail: (id: string) => void;
   onCategoryChange: (id: string, category: Category) => void;
   onMove: (id: string, tab: TabKey) => void;
@@ -49,6 +51,12 @@ export function IssueCard({
             </span>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
+            {hasUnreadDevReply && (
+              <span
+                title="New reply from support agent"
+                className="h-2 w-2 shrink-0 rounded-full bg-red-500"
+              />
+            )}
             <StatusBadge tab={issue.tab} />
             {isComplaint && issue.severity && <SeverityTag severity={issue.severity} />}
           </div>

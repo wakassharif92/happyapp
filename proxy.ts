@@ -20,12 +20,22 @@ export async function proxy(request: NextRequest) {
   // per-project public links (customer chat, team report) — both public
   // by design, secured by RLS (support chat's anonymous-auth identity) or
   // by simply having no sensitive read surface (team report, write-only).
+  // Google Sign-In: /auth/callback MUST be exempt — for a brand new
+  // sign-in or an invite claim, no session cookie exists yet at the point
+  // Google redirects back here (exchangeCodeForSession, inside that route
+  // itself, is what creates one); this optimistic check would otherwise
+  // redirect to /login before the route handler ever runs, breaking the
+  // OAuth flow. /invite/[token] is public the same way /support and
+  // /report are — anyone with the link needs to reach the "sign in with
+  // Google to claim this invite" page before they have any session at all.
   if (
     request.nextUrl.pathname.startsWith("/api/webhooks/whatsapp") ||
     request.nextUrl.pathname.startsWith("/team-report") ||
     request.nextUrl.pathname.startsWith("/api/slack/events") ||
     request.nextUrl.pathname.startsWith("/support/") ||
-    request.nextUrl.pathname.startsWith("/report/")
+    request.nextUrl.pathname.startsWith("/report/") ||
+    request.nextUrl.pathname.startsWith("/auth/callback") ||
+    request.nextUrl.pathname.startsWith("/invite/")
   ) {
     return NextResponse.next({ request });
   }

@@ -63,7 +63,11 @@ export async function POST(
 
   const { data: run, error } = await supabase
     .from("programming_agent_runs")
-    .insert({ issue_ids: selected.map((i) => i.id), status: "running" })
+    .insert({
+      company_id: project.company_id,
+      issue_ids: selected.map((i) => i.id),
+      status: "running",
+    })
     .select()
     .single();
   if (error || !run) {

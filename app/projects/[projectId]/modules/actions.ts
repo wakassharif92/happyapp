@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentCompanyId } from "@/lib/company";
 
 export type ModuleFormState = { error?: string } | undefined;
 
@@ -17,7 +18,9 @@ export async function createModule(
   if (!name) return { error: "Module name is required." };
 
   const supabase = await createClient();
+  const companyId = await getCurrentCompanyId();
   const { error } = await supabase.from("modules").insert({
+    company_id: companyId,
     project_id: projectId,
     name,
     description,

@@ -81,6 +81,10 @@ export function TestRunPanel({
       prevStatus.current = "running";
       setRun({
         id: body.test_run_id,
+        // Local optimistic placeholder only — overwritten by the real row
+        // via the Realtime UPDATE subscription above almost immediately,
+        // so an empty company_id here is never actually read/sent anywhere.
+        company_id: "",
         module_id: moduleId,
         started_at: new Date().toISOString(),
         completed_at: null,

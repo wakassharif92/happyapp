@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentCompanyId } from "@/lib/company";
 
 export type ReportIssueState = { error?: string } | undefined;
 
@@ -38,8 +39,10 @@ export async function reportIssue(
     evidenceUrls.push(path);
   }
 
+  const companyId = await getCurrentCompanyId();
   const { error } = await supabase.from("issues").insert({
     id: issueId,
+    company_id: companyId,
     source: "manual",
     module_id: moduleId,
     reported_by: user?.id ?? null,

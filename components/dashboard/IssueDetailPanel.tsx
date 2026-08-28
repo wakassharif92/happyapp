@@ -9,26 +9,30 @@ import { CategoryDropdown } from "./CategoryDropdown";
 import { SeverityTag } from "./SeverityTag";
 import { StatusBadge } from "./StatusBadge";
 import { Thumbnail } from "./Thumbnail";
-import { IconChevronDown, IconClose, IconCopy } from "./icons";
+import { IconChevronDown, IconClose, IconCopy, IconTicket } from "./icons";
 
 export function IssueDetailPanel({
   issue,
   projectName,
+  hasUnreadDevReply = false,
   onClose,
   onCategoryChange,
   onMove,
   onCopyLink,
   onAddComment,
   onConvertToDev,
+  onViewTicketConversation,
 }: {
   issue: Issue | null;
   projectName: string;
+  hasUnreadDevReply?: boolean;
   onClose: () => void;
   onCategoryChange: (id: string, category: Category) => void;
   onMove: (id: string, tab: TabKey) => void;
   onCopyLink: (id: string) => void;
   onAddComment: (id: string, text: string) => void;
   onConvertToDev: (id: string) => void;
+  onViewTicketConversation: (conversationId: string, ticketNumber: number) => void;
 }) {
   const [draft, setDraft] = useState("");
   const [copied, setCopied] = useState(false);
@@ -135,6 +139,20 @@ export function IssueDetailPanel({
               className="rounded-lg border border-[var(--db-border-strong)] px-4 py-2 text-sm font-medium text-[var(--db-fg)] transition-colors hover:bg-[var(--db-surface-hover)]"
             >
               Convert to Dev Issue
+            </button>
+          )}
+
+          {issue.supportConversationId && issue.ticketNumber != null && (
+            <button
+              type="button"
+              onClick={() =>
+                onViewTicketConversation(issue.supportConversationId!, issue.ticketNumber!)
+              }
+              className="inline-flex items-center gap-2 rounded-lg border border-[var(--db-border-strong)] px-4 py-2 text-sm font-medium text-[var(--db-fg)] transition-colors hover:bg-[var(--db-surface-hover)]"
+            >
+              <IconTicket className="h-4 w-4" />
+              View Conversation · Ticket #{issue.ticketNumber}
+              {hasUnreadDevReply && <span className="h-2 w-2 rounded-full bg-red-500" />}
             </button>
           )}
 

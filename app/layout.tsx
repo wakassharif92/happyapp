@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "QA Agent",
-  description: "AI-powered, multi-project QA dashboard.",
+  title: "HappyApp",
+  description: "Multi-project support, issue tracking, and team reporting.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

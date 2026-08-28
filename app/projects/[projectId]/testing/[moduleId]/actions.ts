@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentCompanyId } from "@/lib/company";
 import type { Priority } from "@/lib/types/database";
 
 export type TestCaseFormState = { error?: string } | undefined;
@@ -21,7 +22,9 @@ export async function createTestCase(
   }
 
   const supabase = await createClient();
+  const companyId = await getCurrentCompanyId();
   const { error } = await supabase.from("test_cases").insert({
+    company_id: companyId,
     module_id: moduleId,
     title,
     scenario,

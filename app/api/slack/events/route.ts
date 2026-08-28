@@ -160,6 +160,7 @@ async function processMessageEvent(teamId: string, event: SlackMessageEvent): Pr
     .from("board_issues")
     .upsert(
       {
+        company_id: connection.company_id,
         project_id: connection.project_id,
         tab: "pending",
         title,
@@ -181,6 +182,7 @@ async function processMessageEvent(teamId: string, event: SlackMessageEvent): Pr
   if (!inserted) return; // duplicate delivery — already handled, nothing further to do
 
   await admin.from("board_issue_activity").insert({
+    company_id: connection.company_id,
     issue_id: inserted.id,
     text: "Reported via Slack",
     actor: senderName,

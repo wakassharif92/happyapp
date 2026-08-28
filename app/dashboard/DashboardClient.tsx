@@ -7,14 +7,17 @@ import type { Category, Issue, Project, TabKey } from "@/lib/board/types";
 import { TAB_ORDER } from "@/lib/board/types";
 import { colorForId } from "@/lib/board/format";
 import { createClient } from "@/lib/supabase/client";
-import type { BoardIssue } from "@/lib/types/database";
+import type { BoardIssue, SupportMessage } from "@/lib/types/database";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { TopBar } from "@/components/dashboard/TopBar";
 import { TabNav } from "@/components/dashboard/TabNav";
 import { IssueCard } from "@/components/dashboard/IssueCard";
 import { IssueDetailPanel } from "@/components/dashboard/IssueDetailPanel";
+import { TicketConversationModal } from "@/components/dashboard/TicketConversationModal";
 import { NewIssueModal, type NewIssueInput } from "@/components/dashboard/NewIssueModal";
 import { EmptyState } from "@/components/dashboard/EmptyState";
+import { markTicketReadByDev } from "@/app/support/[projectId]/actions";
+import { signOut } from "@/app/login/actions";
 import {
   addComment,
   createIssue,
@@ -40,6 +43,9 @@ function toUiIssue(row: BoardIssue): Issue {
     createdAt: row.created_at,
     comments: [],
     activity: [],
+    ticketNumber: row.ticket_number,
+    supportConversationId: row.support_conversation_id,
+    devLastReadAt: row.dev_last_read_at,
   };
 }
 
@@ -58,6 +64,17 @@ export function DashboardClient({
   const [search, setSearch] = useState("");
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [newIssueOpen, setNewIssueOpen] = useState(false);
+  const [ticketConversation, setTicketConversation] = useState<{
+    conversationId: string;
+    ticketNumber: number;
+  } | null>(null);
+  // Latest internal (visible_to_customer=false) agent reply per
+  // conversation — drives the unread dot on "View Conversation", a
+  // separate read-cursor (board_issues.dev_last_read_at) from the agent's
+  // own (support_conversations.last_read_at) for the same messages.
+  const [latestAgentReplyByConversation, setLatestAgentReplyByConversation] = useState<
+    Map<string, string>
+  >(new Map());
 
   const currentProject = initialProjects.find((p) => p.id === currentProjectId) ?? null;
 
@@ -85,6 +102,75 @@ export function DashboardClient({
       supabase.removeChannel(channel);
     };
   }, []);
+
+  const ticketConversationIds = useMemo(
+    () =>
+      Array.from(
+        new Set(issues.map((i) => i.supportConversationId).filter((id): id is string => !!id))
+      ),
+    [issues]
+  );
+
+  // Batch-fetch, then keep live via Realtime — same shape as
+  // SupportInboxClient.tsx's latestByConversation, just scoped to
+  // internal agent replies (visible_to_customer=false) across every
+  // ticket currently loaded on the board.
+  useEffect(() => {
+    if (ticketConversationIds.length === 0) return;
+    let cancelled = false;
+    const supabase = createClient();
+
+    supabase
+      .from("support_messages")
+      .select("conversation_id, created_at")
+      .in("conversation_id", ticketConversationIds)
+      .eq("sender_type", "agent")
+      .eq("visible_to_customer", false)
+      .order("created_at", { ascending: true })
+      .then(({ data }) => {
+        if (cancelled || !data) return;
+        const map = new Map<string, string>();
+        for (const row of data) map.set(row.conversation_id, row.created_at);
+        setLatestAgentReplyByConversation(map);
+      });
+
+    // No server-side `filter:` — same reasoning as every other
+    // postgres_changes subscription in this app (see SupportInboxClient.tsx).
+    const channel = supabase
+      .channel(`board-dev-unread-${crypto.randomUUID()}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "support_messages" },
+        (payload) => {
+          const row = payload.new as SupportMessage;
+          if (row.sender_type !== "agent" || row.visible_to_customer) return;
+          setLatestAgentReplyByConversation((prev) => {
+            const next = new Map(prev);
+            next.set(row.conversation_id, row.created_at);
+            return next;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, [ticketConversationIds]);
+
+  const unreadDevReplyIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const issue of issues) {
+      if (!issue.supportConversationId) continue;
+      const latest = latestAgentReplyByConversation.get(issue.supportConversationId);
+      if (!latest) continue;
+      if (!issue.devLastReadAt || new Date(latest) > new Date(issue.devLastReadAt)) {
+        ids.add(issue.id);
+      }
+    }
+    return ids;
+  }, [issues, latestAgentReplyByConversation]);
 
   const projectIssues = useMemo(
     () => issues.filter((i) => i.projectId === currentProjectId),
@@ -225,12 +311,21 @@ export function DashboardClient({
 
   if (!currentProject) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-50 text-sm text-slate-500">
-        No projects yet — create one from{" "}
-        <Link href="/projects/new" className="ml-1 font-medium text-indigo-600 underline">
-          Add Project
-        </Link>
-        .
+      <div className="flex h-screen flex-col items-center justify-center gap-4 bg-slate-50 text-sm text-slate-500">
+        <p>
+          No projects yet — create one from{" "}
+          <Link href="/projects/new" className="font-medium text-indigo-600 underline">
+            Add Project
+          </Link>
+          .
+        </p>
+        <button
+          type="button"
+          onClick={() => signOut()}
+          className="text-slate-400 underline underline-offset-2 hover:text-slate-600"
+        >
+          Sign out
+        </button>
       </div>
     );
   }
@@ -273,6 +368,7 @@ export function DashboardClient({
                 <IssueCard
                   key={issue.id}
                   issue={issue}
+                  hasUnreadDevReply={unreadDevReplyIds.has(issue.id)}
                   onOpenDetail={setSelectedIssueId}
                   onCategoryChange={handleCategoryChange}
                   onMove={handleMove}
@@ -288,12 +384,28 @@ export function DashboardClient({
       <IssueDetailPanel
         issue={selectedIssue}
         projectName={currentProject.name}
+        hasUnreadDevReply={selectedIssue ? unreadDevReplyIds.has(selectedIssue.id) : false}
         onClose={() => setSelectedIssueId(null)}
         onCategoryChange={handleCategoryChange}
         onMove={handleMove}
         onCopyLink={handleCopyLink}
         onAddComment={handleAddComment}
         onConvertToDev={handleConvertToDev}
+        onViewTicketConversation={(conversationId, ticketNumber) => {
+          setTicketConversation({ conversationId, ticketNumber });
+          if (selectedIssue) {
+            const now = new Date().toISOString();
+            updateIssueLocal(selectedIssue.id, (i) => ({ ...i, devLastReadAt: now }));
+            markTicketReadByDev(selectedIssue.id);
+          }
+        }}
+      />
+
+      <TicketConversationModal
+        open={ticketConversation !== null}
+        conversationId={ticketConversation?.conversationId ?? ""}
+        ticketNumber={ticketConversation?.ticketNumber ?? 0}
+        onClose={() => setTicketConversation(null)}
       />
 
       <NewIssueModal

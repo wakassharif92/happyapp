@@ -69,6 +69,7 @@ Generate test cases covering both happy-path and edge cases. Use search_codebase
     ],
     onUsage: (usage, model) =>
       recordApiUsage(supabase, {
+        companyId: project.company_id,
         projectId: project.id,
         operation: "test_case_generation",
         runId: module.id,
@@ -94,6 +95,7 @@ Generate test cases covering both happy-path and edge cases. Use search_codebase
   if (test_cases.length > 0) {
     await supabase.from("test_cases").insert(
       test_cases.map((tc) => ({
+        company_id: project.company_id,
         module_id: module.id,
         title: tc.title,
         scenario: tc.scenario,

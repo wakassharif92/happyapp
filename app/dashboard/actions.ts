@@ -2,16 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentMember } from "@/lib/company";
 import type { Category, MediaType, Severity, SourceChannel, TabKey } from "@/lib/board/types";
 import type { BoardIssueActivity, BoardIssueComment } from "@/lib/types/database";
-
-async function currentUserLabel(): Promise<string> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  return user?.email ?? "You";
-}
 
 export async function updateIssueCategory(issueId: string, category: Category) {
   const supabase = await createClient();
@@ -21,13 +14,15 @@ export async function updateIssueCategory(issueId: string, category: Category) {
 
 export async function moveIssue(issueId: string, tab: TabKey) {
   const supabase = await createClient();
-  const actor = await currentUserLabel();
+  const member = await getCurrentMember();
+  if (!member) throw new Error("No active company membership");
 
   await supabase.from("board_issues").update({ tab }).eq("id", issueId);
   await supabase.from("board_issue_activity").insert({
+    company_id: member.companyId,
     issue_id: issueId,
     text: `Moved to ${tab.replace("_", " ")}`,
-    actor,
+    actor: member.name,
   });
   revalidatePath("/dashboard");
 }
@@ -37,11 +32,12 @@ export async function addComment(
   text: string
 ): Promise<BoardIssueComment | null> {
   const supabase = await createClient();
-  const author = await currentUserLabel();
+  const member = await getCurrentMember();
+  if (!member) throw new Error("No active company membership");
 
   const { data } = await supabase
     .from("board_issue_comments")
-    .insert({ issue_id: issueId, author, text })
+    .insert({ company_id: member.companyId, issue_id: issueId, author: member.name, text })
     .select("*")
     .single();
 
@@ -78,17 +74,19 @@ export async function createIssue(input: {
   mediaType: MediaType;
 }) {
   const supabase = await createClient();
-  const actor = await currentUserLabel();
+  const member = await getCurrentMember();
+  if (!member) throw new Error("No active company membership");
   const tab: TabKey = input.sourceChannel === "User Complaint" ? "user_complaints" : "pending";
 
   const { data, error } = await supabase
     .from("board_issues")
     .insert({
+      company_id: member.companyId,
       project_id: input.projectId,
       tab,
       title: input.title,
       message: input.message,
-      sender_name: actor,
+      sender_name: member.name,
       source_channel: input.sourceChannel,
       category: input.category,
       severity: input.sourceChannel === "User Complaint" ? (input.severity ?? "Medium") : null,
@@ -102,9 +100,10 @@ export async function createIssue(input: {
   }
 
   await supabase.from("board_issue_activity").insert({
+    company_id: member.companyId,
     issue_id: data.id,
     text: "Issue created",
-    actor,
+    actor: member.name,
   });
 
   revalidatePath("/dashboard");

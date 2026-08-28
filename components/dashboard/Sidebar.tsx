@@ -2,9 +2,9 @@ import Link from "next/link";
 import type { Project, TabKey } from "@/lib/board/types";
 import { TAB_LABELS, TAB_ORDER } from "@/lib/board/types";
 import { ProjectSwitcher } from "./ProjectSwitcher";
+import { SupportNavLink } from "./SupportNavLink";
 import {
   IconArchive,
-  IconChat,
   IconCheckCircle,
   IconCircle,
   IconClock,
@@ -39,13 +39,13 @@ export function Sidebar({
   counts: Record<TabKey, number>;
 }) {
   return (
-    <aside className="flex w-16 shrink-0 flex-col gap-4 border-r border-[var(--db-border)] bg-[var(--db-surface)] p-3 lg:w-64 lg:p-4">
-      <div className="flex items-center gap-2 px-1">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--db-accent)] text-sm font-bold text-[var(--db-accent-fg)]">
-          Q
+    <aside className="flex w-16 shrink-0 flex-col gap-5 border-r border-[var(--db-border)] bg-[var(--db-surface)] p-3 lg:w-64 lg:p-4">
+      <div className="flex items-center gap-2.5 px-1">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--db-accent)] text-sm font-bold text-[var(--db-accent-fg)] shadow-sm shadow-[var(--db-accent)]/30">
+          H
         </div>
-        <span className="hidden truncate text-sm font-semibold text-[var(--db-fg)] lg:inline">
-          Issue Board
+        <span className="hidden truncate text-sm font-semibold tracking-tight text-[var(--db-fg)] lg:inline">
+          HappyApp
         </span>
       </div>
 
@@ -91,15 +91,8 @@ export function Sidebar({
         })}
       </nav>
 
-      <div className="mt-auto flex flex-col gap-0.5">
-        <Link
-          href={`/projects/${currentProjectId}/support`}
-          title="Support"
-          className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-[var(--db-fg-muted)] transition-colors hover:bg-[var(--db-surface-hover)] hover:text-[var(--db-fg)]"
-        >
-          <IconChat className="h-4 w-4 shrink-0" />
-          <span className="hidden lg:inline">Support</span>
-        </Link>
+      <div className="mt-auto flex flex-col gap-0.5 border-t border-[var(--db-border)] pt-3">
+        <SupportNavLink projectId={currentProjectId} />
         <Link
           href={`/projects/${currentProjectId}/links`}
           title="Links"

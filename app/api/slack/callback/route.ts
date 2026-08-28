@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getCurrentMember } from "@/lib/company";
 import { decodeState } from "@/lib/slack/oauthState";
 import { exchangeOAuthCode } from "@/lib/slack/slackApi";
 import { encryptToken } from "@/lib/slack/tokenCrypto";
@@ -54,16 +54,32 @@ export async function GET(request: NextRequest) {
     // Best-effort attribution — the OAuth round-trip through Slack's own
     // domain and back is same-site, so the session cookie normally
     // survives, but this must never block a successful connection if it
-    // doesn't for some reason.
+    // doesn't for some reason. Also the only session-derived signal
+    // available here, so it doubles as the company_id source; if it's
+    // unavailable, fall back to resolving company_id off the project
+    // itself (the connection is being made FOR this project either way).
     let connectedBy: string | null = null;
+    let companyId: string | null = null;
     try {
-      const supabase = await createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      connectedBy = user?.email ?? null;
+      const member = await getCurrentMember();
+      connectedBy = member?.name ?? null;
+      companyId = member?.companyId ?? null;
     } catch {
-      // ignore — connectedBy stays null
+      // ignore — connectedBy/companyId fall through to the project lookup
+    }
+    if (!companyId) {
+      const { data: project } = await admin
+        .from("projects")
+        .select("company_id")
+        .eq("id", projectId)
+        .single();
+      companyId = project?.company_id ?? null;
+    }
+    if (!companyId) {
+      return redirectToIntegrations(request, projectId, {
+        slack: "error",
+        message: "Could not resolve company for this project",
+      });
     }
 
     // No channel yet (REQ-127 step 2 explicitly stores workspace info
@@ -72,6 +88,7 @@ export async function GET(request: NextRequest) {
     // GET /api/slack/channels.
     const { error } = await admin.from("slack_connections").upsert(
       {
+        company_id: companyId,
         project_id: projectId,
         team_id: result.team.id,
         team_name: result.team.name,

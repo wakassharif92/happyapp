@@ -23,6 +23,17 @@ export async function submitTeamReport(
   if (!messageText) return { error: "Describe the issue." };
 
   const supabase = createAdminClient();
+
+  // No session on this public route — company_id is resolved from the
+  // project itself, same reasoning as claimConversation()
+  // (app/support/[projectId]/actions.ts).
+  const { data: project } = await supabase
+    .from("projects")
+    .select("company_id")
+    .eq("id", projectId)
+    .single();
+  if (!project) return { error: "Project not found" };
+
   let mediaPath: string | null = null;
   let mediaType: "image" | "none" = "none";
 
@@ -45,6 +56,7 @@ export async function submitTeamReport(
   const { data: issue, error } = await supabase
     .from("board_issues")
     .insert({
+      company_id: project.company_id,
       project_id: projectId,
       tab: "pending",
       title,
@@ -60,6 +72,7 @@ export async function submitTeamReport(
   if (error) return { error: error.message };
 
   await supabase.from("board_issue_activity").insert({
+    company_id: project.company_id,
     issue_id: issue.id,
     text: "Reported via Team Report form",
     actor: senderName,

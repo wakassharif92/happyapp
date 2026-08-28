@@ -113,19 +113,27 @@ export function SettingsForm({
         />
       </Field>
 
-      <Field
-        label={
-          appType === "mobile"
-            ? "Appium bridge URL"
-            : "Base URL Playwright should open"
-        }
-      >
+      {/* Automation bridge URL hidden from view by request — only relevant
+          to the old QA Agent automated-testing pipeline. A hidden input
+          (not a removed one) preserves the existing value on save; a
+          visible field removed outright would submit an empty value here
+          and silently wipe any project's existing automation_target.
+          Uncomment the visible <Field> below (and delete the hidden
+          input) to restore editing it directly from this form. */}
+      <input
+        type="hidden"
+        name="automation_target"
+        defaultValue={project.automation_target ?? ""}
+      />
+      {/*
+      <Field label="Automation bridge URL (optional, advanced)">
         <input
           name="automation_target"
           className="input"
           defaultValue={project.automation_target ?? ""}
         />
       </Field>
+      */}
 
       {state?.error && (
         <p className="text-sm text-red-600 dark:text-red-400">

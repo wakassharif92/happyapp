@@ -60,6 +60,7 @@ export async function generateModules(
     ],
     onUsage: (usage, model) =>
       recordApiUsage(supabase, {
+        companyId: project.company_id,
         projectId: project.id,
         operation: "module_sync",
         model,
@@ -92,6 +93,7 @@ export async function generateModules(
   if (toInsert.length > 0) {
     await supabase.from("modules").insert(
       toInsert.map((m) => ({
+        company_id: project.company_id,
         project_id: project.id,
         name: m.name,
         description: m.description ?? null,

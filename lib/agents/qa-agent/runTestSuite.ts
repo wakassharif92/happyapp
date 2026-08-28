@@ -47,6 +47,7 @@ async function runOneTestCase(
     .eq("id", testCase.id);
   await logEvent(
     supabase,
+    project.company_id,
     "test_run",
     run.id,
     `Running "${testCase.title}": ${testCase.scenario.slice(0, 80)}${testCase.scenario.length > 80 ? "…" : ""}`,
@@ -89,6 +90,7 @@ If it fails, call create_issue first (tag 'bug' if you're confident it's a real 
     ],
     onUsage: (usage, model) =>
       recordApiUsage(supabase, {
+        companyId: project.company_id,
         projectId: project.id,
         operation: "test_run",
         runId: run.id,
@@ -103,7 +105,10 @@ If it fails, call create_issue first (tag 'bug' if you're confident it's a real 
   if (result.status === "max_turns_exceeded") {
     status = "fail";
     note = "max-turn safety limit hit before the agent reported a result";
-    await logEvent(supabase, "test_run", run.id, `"${testCase.title}": ${note}`, "error");
+    await logEvent(
+    supabase,
+    project.company_id,
+    "test_run", run.id, `"${testCase.title}": ${note}`, "error");
   } else if (result.finishToolName === "record_test_result") {
     const reported = result.result as { status?: unknown; notes?: unknown };
     if (reported.status === "pass" || reported.status === "fail") {
@@ -124,6 +129,7 @@ If it fails, call create_issue first (tag 'bug' if you're confident it's a real 
     .eq("id", testCase.id);
   await logEvent(
     supabase,
+    project.company_id,
     "test_run",
     run.id,
     `"${testCase.title}": ${status}${note ? ` — ${note}` : ""}`,
@@ -151,7 +157,10 @@ export async function runTestSuite(
   } catch (err) {
     const message =
       err instanceof BridgeUnavailableError ? err.message : `Failed to start automation session: ${String(err)}`;
-    await logEvent(supabase, "test_run", run.id, message, "error");
+    await logEvent(
+    supabase,
+    project.company_id,
+    "test_run", run.id, message, "error");
     await supabase
       .from("test_runs")
       .update({ status: "failed", completed_at: new Date().toISOString() })
@@ -166,7 +175,10 @@ export async function runTestSuite(
   for (const testCase of cases) {
     if (isStopRequested(run.id)) {
       stopped = true;
-      await logEvent(supabase, "test_run", run.id, "Stop requested — halting after current progress.", "info");
+      await logEvent(
+    supabase,
+    project.company_id,
+    "test_run", run.id, "Stop requested — halting after current progress.", "info");
       break;
     }
     const status = await runOneTestCase(supabase, project, module, run, bridgeSessionId, testCase);
@@ -189,6 +201,7 @@ export async function runTestSuite(
     .eq("id", run.id);
   await logEvent(
     supabase,
+    project.company_id,
     "test_run",
     run.id,
     `Run ${finalStatus}: ${passed} passed, ${failed} failed.`,

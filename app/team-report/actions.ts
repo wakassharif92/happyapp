@@ -30,6 +30,21 @@ export async function submitReport(
   const projectId = isOtherProject ? null : rawProjectId;
 
   const supabase = createAdminClient();
+
+  // Resolve company_id from the picked project when there is one — "Other
+  // (not listed)" or no selection leaves it null, same documented
+  // nullable-exception as app/report/[projectId]/actions.ts's rationale
+  // (migration 0015): there's nowhere to derive a company from otherwise.
+  let companyId: string | null = null;
+  if (projectId) {
+    const { data: project } = await supabase
+      .from("projects")
+      .select("company_id")
+      .eq("id", projectId)
+      .maybeSingle();
+    companyId = project?.company_id ?? null;
+  }
+
   let imagePath: string | null = null;
 
   if (image && image.size > 0) {
@@ -42,6 +57,7 @@ export async function submitReport(
   }
 
   const { error } = await supabase.from("team_reports").insert({
+    company_id: companyId,
     source: "web",
     sender_name: senderName,
     project_id: projectId,
