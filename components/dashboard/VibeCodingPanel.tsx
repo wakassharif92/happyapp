@@ -180,8 +180,10 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
   //
   // Laid out as an actual document (title page, an explicit "confirm
   // before executing" instruction for the AI, then one heading-led
-  // section per item — a fresh page per item once there's more than one)
-  // rather than one long unbroken paragraph dump.
+  // section per item) rather than one long unbroken paragraph dump.
+  // Items flow one after another on the same page, separated by a
+  // horizontal rule — pages only break where content naturally runs out
+  // of room (ensureSpace), not once per item.
   async function handleGeneratePdf() {
     const selected = allItems.filter((i) => selectedIds.has(i.id));
     if (selected.length === 0) return;
@@ -232,6 +234,15 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
         y += 3;
       }
 
+      function addSeparator() {
+        ensureSpace(1, 6);
+        y += 3;
+        doc.setDrawColor(200);
+        doc.line(margin, y, margin + maxWidth, y);
+        doc.setDrawColor(0);
+        y += 7;
+      }
+
       addHeading("HappyApp — Vibe Coding Export", 16);
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
@@ -258,10 +269,7 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
 
       resolved.forEach(({ item, description, curl }, index) => {
         counters[item.kind] += 1;
-        if (index > 0) {
-          doc.addPage();
-          y = margin;
-        }
+        if (index > 0) addSeparator();
         addHeading(`${kindLabel[item.kind]} ${counters[item.kind]}: ${item.title}`, 14);
         addHeading("Details", 10.5);
         addBody(description);
