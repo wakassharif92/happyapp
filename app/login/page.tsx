@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useState } from "react";
 import { authenticate, type AuthState } from "./actions";
 
@@ -70,6 +71,19 @@ export default function LoginPage() {
               : "Already have an account? Sign in"}
           </button>
         </div>
+
+        {/* REQ-116: the public report form is deliberately reachable without
+            signing in — this is the one visible pointer to it for anyone
+            who lands here without an account. */}
+        <p className="mt-6 text-center text-sm text-slate-500">
+          Found a bug and don&apos;t have an account?{" "}
+          <Link
+            href="/team-report"
+            className="font-medium text-indigo-600 underline underline-offset-2 hover:text-indigo-700"
+          >
+            Report an issue
+          </Link>
+        </p>
       </div>
     </div>
   );

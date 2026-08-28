@@ -15,6 +15,9 @@ const COLORS: Record<string, string> = {
   triaged: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
   fixing: "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300",
   closed: "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-500",
+  // report sources (REQ-112)
+  whatsapp: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
+  web: "bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300",
 };
 
 export function Badge({ value }: { value: string | null }) {

@@ -327,4 +327,135 @@ Both agents need a max-turn / max-tool-call limit per invocation (e.g. 25) to pr
 
 ---
 
+## 11. Team Report Inbox (added after initial build — not in the original spec)
+
+A second and third, informal issue-intake channel alongside REQ-020's in-app form: team members either message a dedicated WhatsApp Business number, or fill out a plain public web form — both land in one shared review list. Deliberately **not** wired into the `issues` table or REQ-050's triage pipeline — this is a lightweight inbox a human skims and categorizes by hand, not a third/fourth entry point into the QA Agent's classification logic.
+
+### REQ-110: WhatsApp webhook receiver
+A route (`POST /api/webhooks/whatsapp`) implementing Meta's WhatsApp Business Cloud API webhook contract: a one-time `GET` verification handshake (echo `hub.challenge` back after checking `hub.verify_token`), and `POST` event notifications carrying incoming messages. Every payload's `X-Hub-Signature-256` header must be verified (HMAC-SHA256 over the raw body using the app's secret) before any data is trusted or persisted.
+
+### REQ-111: `team_reports` data model
+```
+id             uuid primary key
+source         text                -- 'whatsapp' | 'web' (REQ-116)
+wa_message_id  text unique         -- WhatsApp only — idempotency key against webhook retries
+sender_name    text                -- WhatsApp contact profile name, or the name typed into the web form
+sender_phone   text                -- WhatsApp only — the sending number
+project_id     uuid references projects(id)  -- web only (REQ-117) — WhatsApp reports have no project context
+other_project_name text           -- web only (REQ-117) — free-text fallback when the reporter's project isn't in the dropdown; never creates a real `projects` row (see REQ-117)
+page_name      text                -- web only — free-text page/screen name the issue occurred on, optional
+message_text   text                -- the message body, an image's caption, or a placeholder for unsupported types
+image_path     text                -- object path in a private Storage bucket, if an image was attached
+category       text                -- 'frontend' | 'backend' | 'any' | null (REQ-113)
+received_at    timestamptz
+```
+Image attachments are re-hosted in a private Supabase Storage bucket — never linked to directly, matching REQ-020's existing evidence-screenshot handling. For WhatsApp this means the two-step media API (resolve a short-lived URL from the media id, then fetch it); for the web form it's a direct file upload.
+
+### REQ-112: Report inbox UI
+A single page listing `team_reports` from both channels, newest-first: sender (name, falling back to phone number for WhatsApp reports that have neither), a source indicator (WhatsApp vs Web), the project name when one was given (web only, falling back to the free-text `other_project_name` when the reporter used the "Other" option), the page/screen name when given, message text, and the attached image when present (resolved via a signed URL). Reachable from a persistent nav entry, not nested under any specific project.
+
+### REQ-113: Category is a plain human action, not an AI classification
+Each report gets a dropdown — Frontend / Backend / Any / left unset — set directly by whichever developer reviews it. No agent call, no `tag_reasoning`, no automated classification of any kind; this is intentionally simpler than REQ-050's triage logic.
+
+### REQ-114: Idempotency
+Meta retries webhook deliveries on any non-200 or slow response. `wa_message_id` is unique on `team_reports`, and inserts must no-op on conflict rather than erroring, so retried deliveries never create duplicate rows.
+
+### REQ-115: Exception to REQ-090's "local machine" deployment model
+Every other server-side piece of this system (the app, both automation bridges) runs on the local machine per REQ-090. The WhatsApp webhook is the one necessary exception: Meta's servers must be able to reach it over the public internet, so it needs either a tunnel (for local development) or a real public deployment — it cannot be exercised end-to-end purely on `localhost` the way the rest of the system can. The web form (REQ-116) has no such requirement — it's just another page in the same app.
+
+### REQ-116: Public web report form
+A page requiring no login — WhatsApp's Business API setup proved too heavy a barrier for routine team reporting, so this is the low-friction alternative: name, issue detail, an optional image, submit. Must be mobile-responsive, since most reporters will be on a phone. Explicitly exempted from the app's normal auth guard (REQ-071 assumes a logged-in user everywhere else; this route and the WhatsApp webhook are the only two exceptions).
+
+### REQ-117: Web reports may specify a project
+Unlike the WhatsApp channel (no practical way to ask for this over a chat message), the web form includes a project dropdown, since this system already tracks multiple independent projects (Section 1.2) and a report untraceable to a specific one is less useful to act on. The dropdown includes an "Other (not listed)…" option that reveals a free-text project-name field (`other_project_name`) instead of `project_id` — the public form is unauthenticated, so it must never be able to insert directly into `projects` (that would let anyone with the link create arbitrary projects); a dev promotes the note to a real project by hand if warranted.
+
+### REQ-118: Web reports may specify a page/screen name
+The web form includes an optional free-text "page / screen" field (`page_name`) so a report is traceable to roughly where in the app the issue occurred, without requiring the reporter to navigate a module picker.
+
+### REQ-119: Old QA Agent nav is disabled, not removed
+The original project-scoped nav (module sync, Automated Testing, Report Issue, All Issues, Approval Queue, Project Settings — REQ-071/074) is commented out of the project layout rather than deleted. The Team Reports link and project switcher remain active. This reflects a deliberate pause on that surface while the Team Report Inbox (Section 11) is the primary flow — the old nav's component and routes are untouched underneath and can be restored by uncommenting `components/OldQaAgentNav.tsx`'s usage in `app/projects/[projectId]/layout.tsx`.
+
+---
+
+## 12. Issue Board (`/dashboard`) (added after initial build — not in the original spec)
+
+A multi-project QA/Issue Tracking board, separate from both Section 5's manual triage flow and Section 11's Team Report Inbox — this is the "something else" REQ-119 made room for. Started as a frontend-only mock prototype; now backed by real Supabase tables (`board_issues`, `board_issue_comments`, `board_issue_activity` — Section 13's REQ-127 migration), deliberately componentized (`Sidebar`, `TopBar`, `TabNav`, `ProjectSwitcher`, `IssueCard`, `IssueDetailPanel`, `NewIssueModal`, `CategoryDropdown`, `MoveToMenu`, `StatusBadge`, `SeverityTag`, `Thumbnail`, `EmptyState`, all under `components/dashboard/`) so wiring the real backend on didn't require changing any component's props.
+
+### REQ-120: Project-scoped, tab-based issue board
+A project switcher (real `projects` rows) filters the entire board. Six tabs — In Progress, AI Fix, Pending, Done, Closed, User Complaints — each with a live count badge, navigable from both a sidebar nav list and a pill-style `TabNav` at the top of the content area (two paths to the same state, kept in sync). User Complaints is visually distinct (amber/orange accent) since it's a different intake source needing different triage handling, not a different data shape.
+
+### REQ-121: Issue card and detail panel
+Each `IssueCard` shows a thumbnail — a real image/video when one exists (e.g. a Slack attachment), otherwise a colored placeholder with an image/video/paperclip icon — sender initial + name, truncated title/message, an inline-editable category dropdown (Frontend/Backend/Design/Requirements/Other), a status badge matching the active tab's color, relative timestamp, and an icon-button row (copy PDF link, open detail, move-to-tab menu). Clicking a card opens `IssueDetailPanel`, a right-side slide-over with full message text, sender/source/project/timestamp metadata, category + status dropdowns, a "Copy Public PDF Link" primary action, an internal notes/comments thread, and a chronological activity log — comments/activity are lazy-loaded per issue (`getIssueThread` server action) rather than fetched for the whole board up front. User Complaints cards/panels additionally show a Low/Medium/High `SeverityTag` and a "Convert to Dev Issue" button (moves the report into Pending).
+
+### REQ-122: Scoped light/dark theme, independent of the rest of the app
+`globals.css` deliberately disables Tailwind's `dark:` variant app-wide ("Light mode only, by design"). The Issue Board's dark mode toggle does **not** touch that — `app/dashboard/theme.css` defines a separate set of CSS custom properties scoped under a `.qa-board` wrapper class (light values on `.qa-board`, dark overrides on `.qa-board[data-theme="dark"]`), and every dashboard component reads colors via `var(--db-*)` / `var(--status-*)` / `var(--severity-*)` arbitrary-value utilities instead of `dark:` classes. Toggling theme on `/dashboard` never affects any other route.
+
+### REQ-123: Responsive layout
+The sidebar collapses to icon-only below the `lg` breakpoint (labels and counts hidden, project switcher moves into the top bar instead); the issue list is a single-column, divider-free stack of rows at every viewport width rather than a multi-column grid, matching the Linear/Height "list, not cards-in-a-grid" reference aesthetic.
+
+### REQ-124: Discoverability and scope boundary
+Sits behind the app's normal auth guard (`proxy.ts`) like every other authenticated route — no bypass was added, unlike REQ-116's public form. `app/dashboard/page.tsx` is a server component that fetches `projects` and `board_issues` once; `DashboardClient.tsx` holds all interactive state (theme, selected project/tab, search) and calls server actions (`app/dashboard/actions.ts`) for every mutation (category change, move, comment, create) — optimistic local updates for snappy UI, persisted via the action, refreshed via `revalidatePath` on next navigation and live via REQ-133's Realtime subscription in between.
+
+The Board's own `Sidebar` (`components/dashboard/Sidebar.tsx`) links directly to `/projects/[projectId]/integrations` (project-scoped via the currently selected project) and to `/projects` ("All Projects") — everything reachable from the Board never requires visiting the legacy project-scoped nav. That legacy nav (`app/projects/[projectId]/layout.tsx`) had its "Team Reports" and a redundant "Issue Board" self-link removed for the same reason REQ-119 disabled the old QA Agent nav: since the Board is the default landing screen (REQ-125), that old sidebar isn't meant to compete with it for attention — it now shows only the project switcher and an "Integrations" link (kept there too, as a secondary path, since someone might land there directly without going through the Board first).
+
+### REQ-125: Issue Board is the default landing screen
+`/dashboard` is where an authenticated user lands: `app/page.tsx` (`/`) redirects here, and both places that redirect after sign-in — `app/login/actions.ts`'s `submitLogin`/`authenticate` action and `proxy.ts`'s "already signed in, redirect away from `/login`" branch — now point at `/dashboard` instead of `/projects`. The old project-scoped area (REQ-071's nav, modules, triage, etc.) is still fully reachable, just one click further away: the Issue Board's `Sidebar` has an "All Projects" link (`components/dashboard/Sidebar.tsx`) back to `/projects`.
+
+---
+
+## 13. Slack Integration (added after initial build — not in the original spec)
+
+Each project can independently connect its own Slack workspace/channel; messages posted there automatically become issues in that project's Pending tab (Section 12). This is what made backing the Issue Board with real tables (REQ-127 below) necessary rather than optional — see PROGRESS.md for that decision's reasoning. Full Slack App setup walkthrough (scopes, OAuth redirect URL, Event Subscriptions URL, credentials) is in `docs/slack-setup.md`, not duplicated here.
+
+### REQ-126: Slack App — scopes and two integration surfaces
+Bot token scopes: `channels:read`, `channels:history`, `files:read`, `chat:write`, `team:read` (`docs/slack-setup.md` §2) — private-channel support (`groups:read`/`groups:history`) is optional and off by default; REQ-127's channel listing only requests `public_channel` to match, since Slack's `conversations.list` fails its *entire* call with `missing_scope` if `types` names a type the token lacks scope for, even when the token has scope for the other types named. Two independent Slack App features are involved: **OAuth** (installing the app into a workspace and getting a bot token — REQ-127) and **Event Subscriptions** (receiving messages after that — REQ-129). `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `SLACK_SIGNING_SECRET` are env vars, never hardcoded; there's no separate "app base URL" env var — the OAuth `redirect_uri` is derived from the incoming request via `getPublicOrigin()` (`lib/slack/requestOrigin.ts` — see REQ-127's note on why this isn't simply `request.nextUrl.origin`), so it can't go stale after a tunnel restart the way a hardcoded URL would.
+
+### REQ-127: Data model and OAuth connect flow
+`slack_connections` (`supabase/migrations/0007_slack_connections.sql`): one row per project (`project_id unique`), `team_id`/`team_name`, `channel_id`/`channel_name` (null until a channel is picked), `access_token` (AES-256-GCM ciphertext, `lib/slack/tokenCrypto.ts` — see REQ-132), `bot_user_id`, `status` (`pending_channel` → `connected`), `connected_by`. Four routes implement the flow: `GET /api/slack/connect?project_id=` (redirects to Slack's authorize URL, `project_id` embedded in a signed `state` param — `lib/slack/oauthState.ts` — so a caller can't forge a state pointing at a project they don't have access to); `GET /api/slack/callback` (exchanges the code via `oauth.v2.access`, decodes `state`, upserts the connection with no channel yet); `GET /api/slack/channels?project_id=` (lists channels via `conversations.list` using the stored token, for the channel-picker UI); `POST /api/slack/select-channel` (attaches a channel, flips `status` to `connected`); `POST /api/slack/disconnect` (revokes the token via `auth.revoke`, deletes the row).
+
+`redirect_uri` (sent both to `/oauth/v2/authorize` and to `oauth.v2.access` during the token exchange) is built via `lib/slack/requestOrigin.ts`'s `getPublicOrigin()`, **not** `request.nextUrl.origin` directly — behind a tunnel (ngrok, during local dev), TLS terminates at the tunnel's edge and the local Next.js server only ever sees a plain-HTTP hop from the tunnel agent to `localhost`, so `request.nextUrl.origin` reports the local address instead of the public one Slack (and the user's browser) actually used. `getPublicOrigin()` reads `X-Forwarded-Proto`/`X-Forwarded-Host` (which ngrok sets correctly) and falls back to `request.nextUrl.origin` only when neither is present — found live during setup as a `redirect_uri did not match any configured URIs` error from Slack even though the app's own registered URL was correct.
+
+### REQ-128: Events webhook — verification and fast ack
+`POST /api/slack/events` is one shared endpoint for every connected project. Handles Slack's `url_verification` challenge on setup. Every request is verified via `lib/slack/verifySignature.ts` (HMAC-SHA256 over `v0:{timestamp}:{rawBody}` using `SLACK_SIGNING_SECRET`, timing-safe comparison, rejects if the timestamp is more than 5 minutes old — replay protection) before any data is trusted, same shape as REQ-110's WhatsApp signature check. Like the WhatsApp webhook, this route has no Supabase session (Slack's server calling in) and is exempted from `proxy.ts`'s auth guard, authenticated instead by the signature check. Message events are acknowledged with `200` immediately; file download, Storage upload, and the DB insert happen in a fire-and-forget async call after the response is sent — this only works because the app runs as one long-lived Node process (REQ-090/115's existing constraint), not because of any new queue infrastructure.
+
+### REQ-129: Message → issue routing
+On a `message` event: looked up by `(team_id, channel_id)` against `slack_connections` where `status = 'connected'` — no match means the message isn't from a connected channel and is silently ignored (routine, not an error). Bot messages (`event.bot_id` set — includes this app's own confirmation replies), edits (`message_changed`), and deletions (`message_deleted`) are all ignored. Sender display name is resolved via `users.info`. Title is the first ~60 characters of the message text; the full text becomes the issue's message body.
+
+### REQ-130: File attachments
+If `event.files` includes an image or video, it's downloaded via `lib/slack/slackApi.ts`'s `downloadSlackFile` (Slack file URLs require the same bot token as every other API call, passed as a normal `Authorization: Bearer` header — this is the one Slack "API call" that isn't a `slack.com/api/*` method) and uploaded to the existing private `whatsapp-media` Storage bucket under a `slack-<uuid>.<ext>` path (that bucket's name is a legacy artifact at this point — REQ-111 already documented it as holding both WhatsApp and web-form uploads; adding Slack's didn't justify a third bucket). `board_issues.media_url` stores the object **path**, not a public URL, the same convention as `team_reports.image_path` — resolved to a short-lived signed URL at render time (`app/dashboard/page.tsx`). A non-image/video attachment (e.g. a PDF) isn't uploaded, but is noted in the issue body as `[attachment: <filename>]` rather than silently dropped.
+
+### REQ-131: Optional thread confirmation reply
+After successfully creating an issue, `chat.postMessage` posts "✅ Logged as an issue in Pending." back into the source thread (`lib/slack/slackApi.ts`'s `postThreadReply`). Best-effort — wrapped so a failure here (e.g. `chat:write` scope missing) never fails the webhook or blocks the issue from having already been created.
+
+### REQ-132: Security and reliability
+**Dedup**: `board_issues` has a partial unique index on `(slack_channel_id, slack_message_ts)` (null-excluded, since every non-Slack source has both null) — the insert uses `.upsert(..., { onConflict: "slack_channel_id,slack_message_ts", ignoreDuplicates: true })`, so a retried Slack delivery (Slack retries on any non-200/slow response) is a no-op rather than a duplicate issue, same idempotency shape as REQ-114's WhatsApp dedup. **Encryption at rest**: `access_token` is AES-256-GCM ciphertext (`lib/slack/tokenCrypto.ts`, key from `SLACK_TOKEN_ENCRYPTION_KEY`), never plaintext — Supabase Vault (pgsodium) was considered and skipped since this project has no linked Supabase CLI / direct Postgres access this session, making a Vault-backed column unreliable to provision here; app-level encryption achieves the same "never plaintext at rest" property without needing extension access. **Rate limiting**: an in-memory sliding-window limiter (`lib/slack/rateLimit.ts`, 20 events per 10 seconds per `team_id`) — deliberately not Redis-backed, matching the app's single-long-lived-process architecture (REQ-090/115); a trip drops the event rather than queuing it for retry. **Failure handling**: every failure inside the async event-processing path is caught and logged (`console.error`), never thrown back out — the webhook has already returned `200` by then regardless, so a thrown error wouldn't reach Slack anyway, but an uncaught rejection would still be worth avoiding for its own sake (unhandled rejection warnings, potential process-level noise).
+
+### REQ-133: Realtime — Slack-created issues appear without a manual refresh
+`board_issues` is added to the `supabase_realtime` publication (`supabase/migrations/0008_board_issues_realtime.sql`) — **this step is easy to miss**: Supabase Realtime only broadcasts `postgres_changes` for tables explicitly added to that publication, new tables aren't included automatically, and running `alter publication supabase_realtime add table board_issues;` doesn't show any obvious confirmation in the SQL Editor if it silently fails to apply (this happened twice during verification — see PROGRESS.md for how it was diagnosed). `DashboardClient.tsx` subscribes to `INSERT` events on `board_issues` (same pattern as REQ-070's `ActivityFeed.tsx`), so a Slack message lands in an already-open Pending tab live, no reload needed.
+
+---
+
+## 14. Customer Support Chat + Internal Team Report Link (added after initial build — not in the original spec)
+
+Each project gets two distinct public, no-login shareable links, replacing the idea of a single generic report form with two purpose-built ones: a **Customer Support** link opening a genuine real-time chat with an external customer, and an **Internal Team** link (project-scoped, unlike REQ-116's global `/team-report`) where team members report issues straight into that project's Pending tab.
+
+### REQ-134: Every existing RLS policy hardened against anonymous auth (prerequisite)
+Making the customer chat real-time requires giving each anonymous customer browser a genuine Supabase Auth identity (REQ-135) — but anonymous sessions still satisfy `auth.uid() is not null`, the exact check every pre-existing `authenticated_all` policy in this app used. `supabase/migrations/0009_harden_rls_against_anonymous_auth.sql` introduces `is_staff()` (`auth.uid() is not null and not (auth.jwt() ->> 'is_anonymous')::boolean`) and redefines all 13 application-table policies plus 4 Storage policies to use it instead of the bare check. **This must be applied, and staff access re-verified working, before anonymous sign-ins are ever enabled** — skipping this order would let any visitor to the public support-chat link read and write every project's issues, Slack tokens, and settings.
+
+### REQ-135: Customer identity — email-asserted, anonymous-auth-secured
+The Customer Support link is opened from inside the client's own mobile app (a deep link/button), which passes the customer's already-logged-in email as `?email=`. Opening the link without that param shows a blocking error rather than falling back to a manual prompt. `support_conversations` (`supabase/migrations/0010_support_chat.sql`, `0011_support_messages_denormalize_customer.sql`) is keyed `unique(project_id, customer_email)`; on each visit, `claimConversation()` (`app/support/[projectId]/actions.ts`, admin client) upserts on that key and re-points `customer_auth_uid` at whichever anonymous Supabase Auth session (`signInAnonymously()`) opened the link this time — so the same customer keeps one continuous message history across devices/reinstalls, while RLS (`customer_auth_uid = auth.uid()`) stays correct for whichever session is currently active. The email is trusted at face value as asserted by the host app's own login, not independently re-verified — acceptable for a first-party integration.
+
+### REQ-136: Real-time delivery — no server-side `filter:` on postgres_changes
+Both sides (`app/support/[projectId]/SupportChatClient.tsx` for the customer, `app/projects/[projectId]/support/SupportInboxClient.tsx` for the agent) subscribe to `postgres_changes` INSERT on `support_messages`/`support_conversations` **without** a `filter:` parameter, filtering client-side instead — matching `DashboardClient.tsx`'s only independently-proven-reliable pattern in this app. **Found live during verification**: a `filter: "conversation_id=eq.<id>"` param reported `"SUBSCRIBED"` but silently never delivered events for these two tables, reproduced with RLS subqueries removed, `REPLICA IDENTITY FULL` set, production build (no React Strict Mode double-invoke), and unique-per-mount channel names — none of which were the actual cause. Don't reintroduce server-side `filter:` on these subscriptions without re-verifying against a real browser first.
+
+`support_messages.customer_auth_uid` is denormalized (copied from the parent conversation, present on every row regardless of `sender_type`) specifically so the customer's SELECT policy can be a simple equality check rather than a subquery against `support_conversations` — cross-table-subquery RLS policies are a separate, independently-suspected contributor to Realtime authorization being unreliable, though the `filter:` removal above was the change that actually fixed delivery.
+
+### REQ-137: Internal Team link — project-scoped, lands in board_issues
+`/report/[projectId]` (deliberately not `/projects/[projectId]/report`, which already exists as a different, authenticated REQ-020 feature keyed by `module_id`) mirrors `/team-report`'s form shape (name, message, optional image) but has no project dropdown — the project is fixed by the URL — and inserts into `board_issues` (`tab: 'pending'`, `source_channel: 'Team Report'`, a new value added to the check constraint) rather than the legacy `team_reports` table, so submissions appear in that project's Pending tab exactly like Slack-created issues do.
+
+### REQ-138: Discoverability
+Both links are shown with copy-to-clipboard buttons on the existing `/projects/[projectId]/integrations` page (`LinksCard.tsx`) — already this project's "external connection points" hub. The agent-side Support inbox is linked from the Issue Board's own `Sidebar.tsx`, next to Integrations.
+
+---
+
 **End of specification.** Build in this order: (1) Supabase schema from Section 3, (2) Next.js scaffold + auth, (3) Projects table + project switcher + Add Project flow (REQ-000, REQ-071, REQ-074), (4) Modules + manual issue reporting UI (REQ-011, REQ-020) since these need no AI, (5) Automation bridge services — start with whichever app type (mobile or web) your first project needs (REQ-090 through REQ-093), (6) QA Agent loop + Automated Testing feature (Section 4), (7) Manual triage (Section 5), (8) Programming Agent + fix pipeline (Section 6), (9) Realtime activity feed polish (REQ-070).

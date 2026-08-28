@@ -1,0 +1,82 @@
+/* Scoped light/dark theme for the Issue Board only, via CSS custom
+   properties under .qa-board — NOT Tailwind's `dark:` variant, which
+   globals.css deliberately neutralizes app-wide ("Light mode only, by
+   design"). Toggling data-theme here never affects the rest of the app. */
+
+.qa-board {
+  --db-bg: #f8fafc;
+  --db-surface: #ffffff;
+  --db-surface-hover: #f1f5f9;
+  --db-surface-2: #f8fafc;
+  --db-fg: #0f172a;
+  --db-fg-muted: #64748b;
+  --db-fg-subtle: #94a3b8;
+  --db-border: #e2e8f0;
+  --db-border-strong: #cbd5e1;
+  --db-accent: #4f46e5;
+  --db-accent-hover: #4338ca;
+  --db-accent-fg: #ffffff;
+  --db-accent-soft: #eef2ff;
+  --db-overlay: rgba(15, 23, 42, 0.4);
+
+  --status-pending-bg: #f1f5f9;
+  --status-pending-fg: #475569;
+  --status-inprogress-bg: #dbeafe;
+  --status-inprogress-fg: #1d4ed8;
+  --status-aifix-bg: #ede9fe;
+  --status-aifix-fg: #6d28d9;
+  --status-done-bg: #dcfce7;
+  --status-done-fg: #15803d;
+  --status-closed-bg: #f1f5f9;
+  --status-closed-fg: #64748b;
+  --status-complaint-bg: #ffedd5;
+  --status-complaint-fg: #c2410c;
+
+  --severity-low-bg: #f1f5f9;
+  --severity-low-fg: #475569;
+  --severity-medium-bg: #fef3c7;
+  --severity-medium-fg: #b45309;
+  --severity-high-bg: #fee2e2;
+  --severity-high-fg: #b91c1c;
+
+  color-scheme: light;
+}
+
+.qa-board[data-theme="dark"] {
+  --db-bg: #0b1120;
+  --db-surface: #111827;
+  --db-surface-hover: #1e293b;
+  --db-surface-2: #0f172a;
+  --db-fg: #f1f5f9;
+  --db-fg-muted: #94a3b8;
+  --db-fg-subtle: #64748b;
+  --db-border: #1e293b;
+  --db-border-strong: #334155;
+  --db-accent: #818cf8;
+  --db-accent-hover: #6366f1;
+  --db-accent-fg: #0b1120;
+  --db-accent-soft: #1e1b4b;
+  --db-overlay: rgba(0, 0, 0, 0.6);
+
+  --status-pending-bg: #1e293b;
+  --status-pending-fg: #cbd5e1;
+  --status-inprogress-bg: #1e3a8a;
+  --status-inprogress-fg: #bfdbfe;
+  --status-aifix-bg: #4c1d95;
+  --status-aifix-fg: #ddd6fe;
+  --status-done-bg: #14532d;
+  --status-done-fg: #bbf7d0;
+  --status-closed-bg: #1e293b;
+  --status-closed-fg: #94a3b8;
+  --status-complaint-bg: #7c2d12;
+  --status-complaint-fg: #fed7aa;
+
+  --severity-low-bg: #1e293b;
+  --severity-low-fg: #cbd5e1;
+  --severity-medium-bg: #78350f;
+  --severity-medium-fg: #fde68a;
+  --severity-high-bg: #7f1d1d;
+  --severity-high-fg: #fecaca;
+
+  color-scheme: dark;
+}

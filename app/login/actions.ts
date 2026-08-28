@@ -33,5 +33,5 @@ export async function authenticate(
   });
   if (error) return { error: error.message };
 
-  redirect("/projects");
+  redirect("/dashboard");
 }
