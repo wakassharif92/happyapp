@@ -44,22 +44,26 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
   const [generating, setGenerating] = useState(false);
   const [apiToken, setApiToken] = useState<string | null>(null);
 
+  // Fetches every kind unconditionally (not re-fetched per sourceType) —
+  // both so switching the type filter is instant, and so a selection made
+  // under one filter still resolves correctly if the dev changes the
+  // filter afterward (see allItems below — a selection must never depend
+  // on which filter happened to be active when it was checked).
   useEffect(() => {
-    // Stale featureItems from a previous sourceType are harmless left as-is
-    // here — the `items` memo below only ever reads them when sourceType
-    // is 'all'/'feature'/'suggestion', never 'issue'.
-    if (sourceType === "issue") return;
     let cancelled = false;
     const supabase = createClient();
-    let query = supabase.from("feature_requests").select("*").eq("project_id", projectId);
-    if (sourceType !== "all") query = query.eq("kind", sourceType);
-    query.order("created_at", { ascending: false }).then(({ data }) => {
-      if (!cancelled) setFeatureItems(data ?? []);
-    });
+    supabase
+      .from("feature_requests")
+      .select("*")
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: false })
+      .then(({ data }) => {
+        if (!cancelled) setFeatureItems(data ?? []);
+      });
     return () => {
       cancelled = true;
     };
-  }, [sourceType, projectId]);
+  }, [projectId]);
 
   // Used only to build each issue's callback command below — this
   // component never calls the endpoint itself, it just shows the dev
@@ -80,24 +84,39 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
     };
   }, [projectId]);
 
-  const items = useMemo<PickerItem[]>(() => {
-    const issueItems: PickerItem[] =
-      sourceType === "issue" || sourceType === "all"
-        ? issues
-            .filter((i) => statusFilter === "all" || i.tab === statusFilter)
-            .map((i) => ({ id: i.id, title: i.title, text: i.message, kind: "issue" as const }))
-        : [];
-    const requestItems: PickerItem[] =
-      sourceType === "all" || sourceType === "feature" || sourceType === "suggestion"
-        ? featureItems.map((f) => ({
-            id: f.id,
-            title: f.title,
-            text: f.description ?? "",
-            kind: f.kind,
-          }))
-        : [];
+  // Every issue/feature/suggestion the component knows about, regardless
+  // of the current filter — the source of truth for resolving a checked
+  // item's title/text/kind at PDF-generation time, so a selection made
+  // under one filter still resolves correctly after switching filters
+  // (see the bug this fixes: the type/status dropdowns used to reset
+  // selectedIds on change, silently dropping earlier picks).
+  const allItems = useMemo<PickerItem[]>(() => {
+    const issueItems: PickerItem[] = issues.map((i) => ({
+      id: i.id,
+      title: i.title,
+      text: i.message,
+      kind: "issue" as const,
+    }));
+    const requestItems: PickerItem[] = featureItems.map((f) => ({
+      id: f.id,
+      title: f.title,
+      text: f.description ?? "",
+      kind: f.kind,
+    }));
     return [...issueItems, ...requestItems];
-  }, [sourceType, statusFilter, issues, featureItems]);
+  }, [issues, featureItems]);
+
+  // The filtered subset actually shown in the picker list below.
+  const items = useMemo<PickerItem[]>(() => {
+    return allItems.filter((item) => {
+      if (item.kind === "issue") {
+        if (sourceType !== "issue" && sourceType !== "all") return false;
+        const issue = issues.find((i) => i.id === item.id);
+        return statusFilter === "all" || issue?.tab === statusFilter;
+      }
+      return sourceType === "all" || sourceType === item.kind;
+    });
+  }, [allItems, issues, sourceType, statusFilter]);
 
   function toggleSelected(id: string) {
     setSelectedIds((prev) => {
@@ -164,7 +183,7 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
   // section per item — a fresh page per item once there's more than one)
   // rather than one long unbroken paragraph dump.
   async function handleGeneratePdf() {
-    const selected = items.filter((i) => selectedIds.has(i.id));
+    const selected = allItems.filter((i) => selectedIds.has(i.id));
     if (selected.length === 0) return;
     setGenerating(true);
     try {
@@ -264,11 +283,7 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
       <div className="card flex flex-wrap items-center gap-2 p-4">
         <select
           value={sourceType}
-          onChange={(e) => {
-            setSourceType(e.target.value as SourceType);
-            setSelectedIds(new Set());
-            setExpandedId(null);
-          }}
+          onChange={(e) => setSourceType(e.target.value as SourceType)}
           className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-700"
         >
           <option value="all">All</option>
@@ -280,11 +295,7 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
         {(sourceType === "issue" || sourceType === "all") && (
           <select
             value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value as StatusFilter);
-              setSelectedIds(new Set());
-              setExpandedId(null);
-            }}
+            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
             className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-700"
           >
             <option value="all">All statuses</option>
