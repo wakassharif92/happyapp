@@ -3,15 +3,23 @@
 import { useState } from "react";
 import type { TabKey } from "@/lib/board/types";
 import { TAB_LABELS, TAB_ORDER } from "@/lib/board/types";
+import type { FeatureRequestKind } from "@/lib/types/database";
 import { IconMove } from "./icons";
 
 export function MoveToMenu({
   currentTab,
   onMove,
+  onConvert,
   compact = false,
 }: {
   currentTab: TabKey;
   onMove: (tab: TabKey) => void;
+  // Dev-side "send this issue to Feature/Suggestion" — a separate action
+  // from onMove since it inserts into feature_requests rather than
+  // updating board_issues.tab (app/dashboard/featuresActions.ts's
+  // convertIssueToFeatureRequest). Optional so MoveToMenu still works
+  // anywhere it's used without this wired up.
+  onConvert?: (kind: FeatureRequestKind) => void;
   compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -46,6 +54,31 @@ export function MoveToMenu({
                 Move to {TAB_LABELS[tab]}
               </button>
             ))}
+            {onConvert && (
+              <>
+                <div className="my-1 border-t border-[var(--db-border)]" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    onConvert("feature");
+                    setOpen(false);
+                  }}
+                  className="block w-full px-3 py-1.5 text-left text-sm text-[var(--db-fg)] transition-colors hover:bg-[var(--db-surface-hover)]"
+                >
+                  Move to Feature
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onConvert("suggestion");
+                    setOpen(false);
+                  }}
+                  className="block w-full px-3 py-1.5 text-left text-sm text-[var(--db-fg)] transition-colors hover:bg-[var(--db-surface-hover)]"
+                >
+                  Move to Suggestion
+                </button>
+              </>
+            )}
           </div>
         </>
       )}

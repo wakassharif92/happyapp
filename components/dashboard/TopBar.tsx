@@ -4,6 +4,8 @@ import { signOut } from "@/app/login/actions";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { IconMoon, IconPlus, IconSearch, IconSun } from "./icons";
 
+export type AddKind = "issue" | "feature" | "suggestion";
+
 export function TopBar({
   projects,
   currentProjectId,
@@ -12,7 +14,7 @@ export function TopBar({
   onSearchChange,
   theme,
   onToggleTheme,
-  onNewIssue,
+  onAdd,
   userInitial,
 }: {
   projects: Project[];
@@ -22,10 +24,11 @@ export function TopBar({
   onSearchChange: (value: string) => void;
   theme: "light" | "dark";
   onToggleTheme: () => void;
-  onNewIssue: () => void;
+  onAdd: (kind: AddKind) => void;
   userInitial: string;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
   return (
     <header className="flex flex-col gap-3 border-b border-[var(--db-border)] bg-[var(--db-surface)] p-3 sm:flex-row sm:items-center sm:gap-4 sm:p-4">
       <div className="lg:hidden">
@@ -56,14 +59,43 @@ export function TopBar({
           {theme === "light" ? <IconMoon /> : <IconSun />}
         </button>
 
-        <button
-          type="button"
-          onClick={onNewIssue}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--db-accent)] px-3 py-2 text-sm font-medium text-[var(--db-accent-fg)] shadow-sm transition-all duration-150 hover:bg-[var(--db-accent-hover)] hover:shadow-md active:scale-[0.98]"
-        >
-          <IconPlus className="h-4 w-4" />
-          <span className="hidden sm:inline">New Issue</span>
-        </button>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setAddMenuOpen((o) => !o)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--db-accent)] px-3 py-2 text-sm font-medium text-[var(--db-accent-fg)] shadow-sm transition-all duration-150 hover:bg-[var(--db-accent-hover)] hover:shadow-md active:scale-[0.98]"
+          >
+            <IconPlus className="h-4 w-4" />
+            <span className="hidden sm:inline">Add</span>
+          </button>
+
+          {addMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setAddMenuOpen(false)} />
+              <div className="absolute right-0 top-full z-20 mt-1 min-w-[160px] overflow-hidden rounded-lg border border-[var(--db-border)] bg-[var(--db-surface)] shadow-lg">
+                {(
+                  [
+                    ["issue", "Issue"],
+                    ["feature", "Feature"],
+                    ["suggestion", "Suggestion"],
+                  ] as const
+                ).map(([kind, label]) => (
+                  <button
+                    key={kind}
+                    type="button"
+                    onClick={() => {
+                      onAdd(kind);
+                      setAddMenuOpen(false);
+                    }}
+                    className="block w-full px-3 py-2 text-left text-sm text-[var(--db-fg)] transition-colors hover:bg-[var(--db-surface-hover)]"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
 
         <div className="relative">
           <button

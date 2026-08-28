@@ -277,6 +277,57 @@ export type SupportMessage = {
   created_at: string;
 };
 
+export type Document = {
+  id: string;
+  company_id: string;
+  project_id: string;
+  name: string;
+  url: string;
+  created_by: string;
+  created_at: string;
+};
+
+export type FeatureRequestKind = "feature" | "suggestion";
+export type FeatureRequestStatus = "pending" | "in_progress" | "done";
+
+export type FeatureRequest = {
+  id: string;
+  company_id: string;
+  project_id: string;
+  kind: FeatureRequestKind;
+  title: string;
+  description: string | null;
+  status: FeatureRequestStatus;
+  created_by: string;
+  source_issue_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Note = {
+  id: string;
+  company_id: string;
+  user_id: string;
+  project_id: string | null;
+  text: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PersonalTaskStatus = "pending" | "in_progress" | "done";
+
+export type PersonalTask = {
+  id: string;
+  company_id: string;
+  user_id: string;
+  project_id: string | null;
+  task_date: string;
+  title: string;
+  status: PersonalTaskStatus;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Company = {
   id: string;
   name: string;
@@ -418,6 +469,33 @@ export type Database = {
             "company_id" | "conversation_id" | "customer_auth_uid" | "sender_type" | "sender_name" | "body"
           >;
         Update: Partial<Omit<SupportMessage, "id">>;
+        Relationships: [];
+      };
+      documents: {
+        Row: Document;
+        Insert: Partial<Document> &
+          Pick<Document, "company_id" | "project_id" | "name" | "url" | "created_by">;
+        Update: Partial<Omit<Document, "id">>;
+        Relationships: [];
+      };
+      feature_requests: {
+        Row: FeatureRequest;
+        Insert: Partial<FeatureRequest> &
+          Pick<FeatureRequest, "company_id" | "project_id" | "kind" | "title" | "created_by">;
+        Update: Partial<Omit<FeatureRequest, "id">>;
+        Relationships: [];
+      };
+      notes: {
+        Row: Note;
+        Insert: Partial<Note> & Pick<Note, "company_id" | "user_id" | "text">;
+        Update: Partial<Omit<Note, "id">>;
+        Relationships: [];
+      };
+      personal_tasks: {
+        Row: PersonalTask;
+        Insert: Partial<PersonalTask> &
+          Pick<PersonalTask, "company_id" | "user_id" | "task_date" | "title">;
+        Update: Partial<Omit<PersonalTask, "id">>;
         Relationships: [];
       };
     };

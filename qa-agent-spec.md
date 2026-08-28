@@ -505,4 +505,28 @@ Unread tracking needed a second, independent read-cursor: `support_conversations
 
 ---
 
+## 17. Documents, Features/Suggestions, Notes, Personal Tasks, "For Vibe Coding" (added after initial build — not in the original spec)
+
+Five new sidebar/tab destinations on top of the existing 6 board tabs. Scope was confirmed with the user before schema was written: Documents/Features/Suggestions are per-project (like the existing tabs); Notes/Personal Tasks are company-wide and private to the signed-in member, with an optional per-item project tag.
+
+### REQ-150: Documents — admin-managed reference links
+Per-project, `documents` table (`name`, `url` only — "only a link can be added"). Any active company member can read; only admins can add/delete (RLS mirrors `company_members`' admin-check pattern). Reached from a Sidebar bottom-nav link (`/projects/[projectId]/documents`), not the tab bar — described as "in the sidebar," not "a tab."
+
+### REQ-151: Features and Suggestions — two tabs, one table
+`feature_requests` (`kind: 'feature' | 'suggestion'`, `status: 'pending' | 'in_progress' | 'done'`) — any active company member can add and update status, not admin-gated. Two separate tabs in the UI (`FeaturesPanel.tsx`, parameterized by `kind`), backed by one table since the shape is identical. Reachable both from their own tab's inline add form and from the TopBar's "Add" popup (Issue/Feature/Suggestion — replaces the old "New Issue" button).
+
+### REQ-152: Converting an issue to a Feature or Suggestion
+`MoveToMenu.tsx` (the dev-facing move dropdown on every issue) gained "Move to Feature"/"Move to Suggestion". `convertIssueToFeatureRequest` inserts the `feature_requests` row (`source_issue_id` set, so the card shows its origin) and moves the original issue to `closed` rather than deleting it — same audit-preserving pattern as every other conversion in this app.
+
+### REQ-153: Notes and Personal Tasks — private per-member
+`notes` and `personal_tasks` are the first tables in this app scoped to an individual member (`user_id = auth.uid()`) rather than shared company-wide via `is_staff()`. Both are company-wide (not restricted to whichever project is selected) with an optional `project_id` tag, filterable via a dropdown in each panel. Personal Tasks additionally has a `task_date` for its day-wise view — Yesterday/Today/Tomorrow quick buttons plus a native date picker (`PersonalTasksPanel.tsx`).
+
+### REQ-154: "For Vibe Coding" — preparing an AI-ready description
+`VibeCodingPanel.tsx`: pick an existing Issue (filterable by workflow stage)/Feature/Suggestion, refine its description in a "Dev Description" field pre-filled from the original report, then generate a text-only PDF (`jspdf`, dynamically imported inside the click handler to avoid touching browser globals during SSR) to hand to an external AI coding tool. Nothing here is persisted server-side — the field is reloaded fresh each time an item is picked.
+
+### REQ-155: Closing the loop with AI Fix
+"Send to AI Fix" (Vibe Coding panel) moves the issue to the existing `ai_fix` tab once an external AI attempt has been made outside the app. Verifying it as not-actually-fixed reuses the *existing* comment/notes system on the issue — no new schema. Re-selecting that issue in Vibe Coding fetches its `board_issue_comments` and folds them into the Dev Description pre-fill, so a re-generated PDF carries the full "original report → fix attempt note → why it wasn't fixed" trail rather than just the original text.
+
+---
+
 **End of specification.** Build in this order: (1) Supabase schema from Section 3, (2) Next.js scaffold + auth, (3) Projects table + project switcher + Add Project flow (REQ-000, REQ-071, REQ-074), (4) Modules + manual issue reporting UI (REQ-011, REQ-020) since these need no AI, (5) Automation bridge services — start with whichever app type (mobile or web) your first project needs (REQ-090 through REQ-093), (6) QA Agent loop + Automated Testing feature (Section 4), (7) Manual triage (Section 5), (8) Programming Agent + fix pipeline (Section 6), (9) Realtime activity feed polish (REQ-070).

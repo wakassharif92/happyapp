@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Category, Issue, TabKey } from "@/lib/board/types";
+import type { FeatureRequestKind } from "@/lib/types/database";
 import { initials } from "@/lib/board/format";
 import { formatRelativeTime } from "@/lib/board/relativeTime";
 import { CategoryDropdown } from "./CategoryDropdown";
@@ -17,6 +18,7 @@ export function IssueCard({
   onOpenDetail,
   onCategoryChange,
   onMove,
+  onConvert,
   onCopyLink,
   onConvertToDev,
 }: {
@@ -25,6 +27,7 @@ export function IssueCard({
   onOpenDetail: (id: string) => void;
   onCategoryChange: (id: string, category: Category) => void;
   onMove: (id: string, tab: TabKey) => void;
+  onConvert?: (id: string, kind: FeatureRequestKind) => void;
   onCopyLink: (id: string) => void;
   onConvertToDev: (id: string) => void;
 }) {
@@ -117,7 +120,12 @@ export function IssueCard({
             >
               <IconExpand className="h-4 w-4" />
             </button>
-            <MoveToMenu currentTab={issue.tab} onMove={(tab) => onMove(issue.id, tab)} compact />
+            <MoveToMenu
+              currentTab={issue.tab}
+              onMove={(tab) => onMove(issue.id, tab)}
+              onConvert={onConvert ? (kind) => onConvert(issue.id, kind) : undefined}
+              compact
+            />
           </div>
         </div>
       </div>

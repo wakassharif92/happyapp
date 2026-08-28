@@ -76,6 +76,39 @@ export const TAB_LABELS: Record<TabKey, string> = {
   user_complaints: "User Complaints",
 };
 
+// Extra sidebar/tab-bar destinations that aren't board_issues-backed —
+// Features/Suggestions are their own table (feature_requests, filtered by
+// kind); Notes/Personal Tasks are private per-member. Rendered alongside
+// the board tabs in the same nav (Sidebar.tsx, TabNav.tsx) since the user
+// explicitly described all four as "tabs," even though the underlying
+// data source differs — DashboardClient.tsx branches on which kind of
+// view is active to decide what to render in the main content area.
+export type ExtraView = "features" | "suggestions" | "notes" | "personal_tasks" | "vibe_coding";
+export type BoardView = TabKey | ExtraView;
+
+export const EXTRA_VIEW_ORDER: ExtraView[] = [
+  "features",
+  "suggestions",
+  "notes",
+  "personal_tasks",
+  "vibe_coding",
+];
+
+export const VIEW_ORDER: BoardView[] = [...TAB_ORDER, ...EXTRA_VIEW_ORDER];
+
+export const VIEW_LABELS: Record<BoardView, string> = {
+  ...TAB_LABELS,
+  features: "Features",
+  suggestions: "Suggestions",
+  notes: "Notes",
+  personal_tasks: "Personal Tasks",
+  vibe_coding: "For Vibe Coding",
+};
+
+export function isTabKey(view: BoardView): view is TabKey {
+  return (TAB_ORDER as string[]).includes(view);
+}
+
 export const CATEGORIES: Category[] = [
   "Frontend",
   "Backend",

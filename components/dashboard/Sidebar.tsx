@@ -1,43 +1,54 @@
 import Link from "next/link";
-import type { Project, TabKey } from "@/lib/board/types";
-import { TAB_LABELS, TAB_ORDER } from "@/lib/board/types";
+import type { BoardView, Project } from "@/lib/board/types";
+import { VIEW_LABELS, VIEW_ORDER } from "@/lib/board/types";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { SupportNavLink } from "./SupportNavLink";
 import {
   IconArchive,
+  IconCalendar,
   IconCheckCircle,
   IconCircle,
   IconClock,
+  IconCode,
+  IconFile,
   IconFolder,
+  IconLightbulb,
   IconLink,
   IconMegaphone,
+  IconNote,
   IconSparkles,
+  IconStar,
   IconUsers,
 } from "./icons";
 
-const TAB_ICONS: Record<TabKey, (props: { className?: string }) => React.ReactElement> = {
+const VIEW_ICONS: Record<BoardView, (props: { className?: string }) => React.ReactElement> = {
   pending: IconCircle,
   in_progress: IconClock,
   ai_fix: IconSparkles,
   done: IconCheckCircle,
   closed: IconArchive,
   user_complaints: IconMegaphone,
+  features: IconLightbulb,
+  suggestions: IconStar,
+  notes: IconNote,
+  personal_tasks: IconCalendar,
+  vibe_coding: IconCode,
 };
 
 export function Sidebar({
   projects,
   currentProjectId,
   onProjectChange,
-  activeTab,
-  onTabChange,
+  activeView,
+  onViewChange,
   counts,
 }: {
   projects: Project[];
   currentProjectId: string;
   onProjectChange: (projectId: string) => void;
-  activeTab: TabKey;
-  onTabChange: (tab: TabKey) => void;
-  counts: Record<TabKey, number>;
+  activeView: BoardView;
+  onViewChange: (view: BoardView) => void;
+  counts: Partial<Record<BoardView, number>>;
 }) {
   return (
     <aside className="flex w-16 shrink-0 flex-col gap-5 border-r border-[var(--db-border)] bg-[var(--db-surface)] p-3 lg:w-64 lg:p-4">
@@ -59,15 +70,16 @@ export function Sidebar({
       </div>
 
       <nav className="flex flex-col gap-0.5">
-        {TAB_ORDER.map((tab) => {
-          const Icon = TAB_ICONS[tab];
-          const active = tab === activeTab;
+        {VIEW_ORDER.map((view) => {
+          const Icon = VIEW_ICONS[view];
+          const active = view === activeView;
+          const count = counts[view];
           return (
             <button
-              key={tab}
+              key={view}
               type="button"
-              onClick={() => onTabChange(tab)}
-              title={TAB_LABELS[tab]}
+              onClick={() => onViewChange(view)}
+              title={VIEW_LABELS[view]}
               className={`flex items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors lg:justify-start ${
                 active
                   ? "bg-[var(--db-accent-soft)] text-[var(--db-accent)]"
@@ -76,17 +88,19 @@ export function Sidebar({
             >
               <span className="flex items-center gap-2.5">
                 <Icon className="h-4 w-4 shrink-0" />
-                <span className="hidden lg:inline">{TAB_LABELS[tab]}</span>
+                <span className="hidden lg:inline">{VIEW_LABELS[view]}</span>
               </span>
-              <span
-                className={`hidden rounded-full px-1.5 py-0.5 text-xs tabular-nums lg:inline ${
-                  active
-                    ? "bg-[var(--db-accent)] text-[var(--db-accent-fg)]"
-                    : "bg-[var(--db-surface-2)] text-[var(--db-fg-subtle)]"
-                }`}
-              >
-                {counts[tab]}
-              </span>
+              {count !== undefined && (
+                <span
+                  className={`hidden rounded-full px-1.5 py-0.5 text-xs tabular-nums lg:inline ${
+                    active
+                      ? "bg-[var(--db-accent)] text-[var(--db-accent-fg)]"
+                      : "bg-[var(--db-surface-2)] text-[var(--db-fg-subtle)]"
+                  }`}
+                >
+                  {count}
+                </span>
+              )}
             </button>
           );
         })}
@@ -94,6 +108,14 @@ export function Sidebar({
 
       <div className="mt-auto flex flex-col gap-0.5 border-t border-[var(--db-border)] pt-3">
         <SupportNavLink projectId={currentProjectId} />
+        <Link
+          href={`/projects/${currentProjectId}/documents`}
+          title="Documents"
+          className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-[var(--db-fg-muted)] transition-colors hover:bg-[var(--db-surface-hover)] hover:text-[var(--db-fg)]"
+        >
+          <IconFile className="h-4 w-4 shrink-0" />
+          <span className="hidden lg:inline">Documents</span>
+        </Link>
         <Link
           href="/team"
           title="Team Members"

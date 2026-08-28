@@ -3,21 +3,27 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import "./theme.css";
-import type { Category, Issue, Project, TabKey } from "@/lib/board/types";
-import { TAB_ORDER } from "@/lib/board/types";
+import type { BoardView, Category, Issue, Project, TabKey } from "@/lib/board/types";
+import { TAB_ORDER, isTabKey } from "@/lib/board/types";
 import { colorForId } from "@/lib/board/format";
 import { createClient } from "@/lib/supabase/client";
-import type { BoardIssue, SupportMessage } from "@/lib/types/database";
+import type { BoardIssue, FeatureRequestKind, SupportMessage } from "@/lib/types/database";
 import { Sidebar } from "@/components/dashboard/Sidebar";
-import { TopBar } from "@/components/dashboard/TopBar";
+import { TopBar, type AddKind } from "@/components/dashboard/TopBar";
 import { TabNav } from "@/components/dashboard/TabNav";
 import { IssueCard } from "@/components/dashboard/IssueCard";
 import { IssueDetailPanel } from "@/components/dashboard/IssueDetailPanel";
 import { TicketConversationModal } from "@/components/dashboard/TicketConversationModal";
 import { NewIssueModal, type NewIssueInput } from "@/components/dashboard/NewIssueModal";
+import { AddFeatureModal } from "@/components/dashboard/AddFeatureModal";
+import { FeaturesPanel } from "@/components/dashboard/FeaturesPanel";
+import { NotesPanel } from "@/components/dashboard/NotesPanel";
+import { PersonalTasksPanel } from "@/components/dashboard/PersonalTasksPanel";
+import { VibeCodingPanel } from "@/components/dashboard/VibeCodingPanel";
 import { EmptyState } from "@/components/dashboard/EmptyState";
 import { markTicketReadByDev } from "@/app/support/[projectId]/actions";
 import { signOut } from "@/app/login/actions";
+import { createFeatureRequest, convertIssueToFeatureRequest } from "./featuresActions";
 import {
   addComment,
   createIssue,
@@ -59,11 +65,12 @@ export function DashboardClient({
   const [issues, setIssues] = useState<Issue[]>(() => initialIssues.map(toUiIssue));
   const [loadedThreads, setLoadedThreads] = useState<Set<string>>(new Set());
   const [currentProjectId, setCurrentProjectId] = useState(initialProjects[0]?.id ?? "");
-  const [activeTab, setActiveTab] = useState<TabKey>("pending");
+  const [activeView, setActiveView] = useState<BoardView>("pending");
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [newIssueOpen, setNewIssueOpen] = useState(false);
+  const [addFeatureKind, setAddFeatureKind] = useState<FeatureRequestKind | null>(null);
   const [ticketConversation, setTicketConversation] = useState<{
     conversationId: string;
     ticketNumber: number;
@@ -186,9 +193,10 @@ export function DashboardClient({
   }, [projectIssues]);
 
   const visibleIssues = useMemo(() => {
+    if (!isTabKey(activeView)) return [];
     const q = search.trim().toLowerCase();
     return projectIssues
-      .filter((i) => i.tab === activeTab)
+      .filter((i) => i.tab === activeView)
       .filter(
         (i) =>
           !q ||
@@ -197,7 +205,7 @@ export function DashboardClient({
           i.senderName.toLowerCase().includes(q)
       )
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [projectIssues, activeTab, search]);
+  }, [projectIssues, activeView, search]);
 
   const selectedIssue = issues.find((i) => i.id === selectedIssueId) ?? null;
 
@@ -305,8 +313,57 @@ export function DashboardClient({
       mediaType: input.mediaType,
     });
     setIssues((prev) => [toUiIssue(created), ...prev]);
-    setActiveTab(created.tab);
+    setActiveView(created.tab);
     setNewIssueOpen(false);
+  }
+
+  function handleAdd(kind: AddKind) {
+    if (kind === "issue") {
+      setNewIssueOpen(true);
+    } else {
+      setAddFeatureKind(kind);
+    }
+  }
+
+  async function handleSubmitFeature(input: { title: string; description: string }) {
+    if (!currentProjectId || !addFeatureKind) return;
+    await createFeatureRequest({
+      projectId: currentProjectId,
+      kind: addFeatureKind,
+      title: input.title,
+      description: input.description,
+    });
+    setActiveView(addFeatureKind === "feature" ? "features" : "suggestions");
+    setAddFeatureKind(null);
+  }
+
+  // Dev-side "Move to Feature/Suggestion" (MoveToMenu.tsx's onConvert) —
+  // creates the feature_requests row and moves the original issue to
+  // 'closed' server-side; mirrored locally the same way handleMove does,
+  // since this component doesn't subscribe to board_issues UPDATEs live.
+  async function handleConvert(issueId: string, kind: FeatureRequestKind) {
+    const issue = issues.find((i) => i.id === issueId);
+    if (!issue || !currentProjectId) return;
+    updateIssueLocal(issueId, (i) => ({
+      ...i,
+      tab: "closed",
+      activity: [
+        ...i.activity,
+        {
+          id: `local-${Date.now()}`,
+          text: `Converted to ${kind === "feature" ? "Feature" : "Suggestion"}`,
+          actor: "You",
+          createdAt: new Date().toISOString(),
+        },
+      ],
+    }));
+    await convertIssueToFeatureRequest({
+      issueId,
+      projectId: currentProjectId,
+      kind,
+      title: issue.title,
+      description: issue.message,
+    });
   }
 
   if (!currentProject) {
@@ -339,8 +396,8 @@ export function DashboardClient({
         projects={initialProjects}
         currentProjectId={currentProjectId}
         onProjectChange={setCurrentProjectId}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
+        activeView={activeView}
+        onViewChange={setActiveView}
         counts={counts}
       />
 
@@ -353,29 +410,49 @@ export function DashboardClient({
           onSearchChange={setSearch}
           theme={theme}
           onToggleTheme={() => setTheme((t) => (t === "light" ? "dark" : "light"))}
-          onNewIssue={() => setNewIssueOpen(true)}
+          onAdd={handleAdd}
           userInitial="Y"
         />
 
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">
-          <TabNav activeTab={activeTab} onTabChange={setActiveTab} counts={counts} />
+          <TabNav activeView={activeView} onViewChange={setActiveView} counts={counts} />
 
-          <div className="mt-4 flex flex-col gap-3">
-            {visibleIssues.length === 0 ? (
-              <EmptyState tab={activeTab} />
+          <div className="mt-4">
+            {isTabKey(activeView) ? (
+              <div className="flex flex-col gap-3">
+                {visibleIssues.length === 0 ? (
+                  <EmptyState tab={activeView} />
+                ) : (
+                  visibleIssues.map((issue) => (
+                    <IssueCard
+                      key={issue.id}
+                      issue={issue}
+                      hasUnreadDevReply={unreadDevReplyIds.has(issue.id)}
+                      onOpenDetail={setSelectedIssueId}
+                      onCategoryChange={handleCategoryChange}
+                      onMove={handleMove}
+                      onConvert={handleConvert}
+                      onCopyLink={handleCopyLink}
+                      onConvertToDev={handleConvertToDev}
+                    />
+                  ))
+                )}
+              </div>
+            ) : activeView === "features" || activeView === "suggestions" ? (
+              <FeaturesPanel
+                projectId={currentProjectId}
+                kind={activeView === "features" ? "feature" : "suggestion"}
+              />
+            ) : activeView === "notes" ? (
+              <NotesPanel projects={initialProjects} />
+            ) : activeView === "personal_tasks" ? (
+              <PersonalTasksPanel projects={initialProjects} />
             ) : (
-              visibleIssues.map((issue) => (
-                <IssueCard
-                  key={issue.id}
-                  issue={issue}
-                  hasUnreadDevReply={unreadDevReplyIds.has(issue.id)}
-                  onOpenDetail={setSelectedIssueId}
-                  onCategoryChange={handleCategoryChange}
-                  onMove={handleMove}
-                  onCopyLink={handleCopyLink}
-                  onConvertToDev={handleConvertToDev}
-                />
-              ))
+              <VibeCodingPanel
+                projectId={currentProjectId}
+                issues={projectIssues}
+                onSendToAiFix={(issueId) => handleMove(issueId, "ai_fix")}
+              />
             )}
           </div>
         </main>
@@ -413,6 +490,13 @@ export function DashboardClient({
         onClose={() => setNewIssueOpen(false)}
         projectName={currentProject.name}
         onCreate={handleCreateIssue}
+      />
+
+      <AddFeatureModal
+        open={addFeatureKind !== null}
+        kind={addFeatureKind ?? "feature"}
+        onClose={() => setAddFeatureKind(null)}
+        onSubmit={handleSubmitFeature}
       />
     </div>
   );
