@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { SupportMessage } from "@/lib/types/database";
 import { IconClose, IconImage } from "@/components/dashboard/icons";
+import { detectPlatform, type Platform } from "@/lib/platform";
 
 export type ChatMessage = SupportMessage & { mediaSignedUrl?: string | null };
 
@@ -34,6 +35,13 @@ export function ChatWindow({
   const [draft, setDraft] = useState("");
   const [pendingImage, setPendingImage] = useState<File | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  // Lazy initializer (not an effect + setState — matches this codebase's
+  // established pattern, e.g. ActivityFeed.tsx) — detectPlatform() is
+  // SSR-safe (returns "web" when navigator is undefined), and on the
+  // client this runs during the component's first render pass, so the
+  // file input's `capture` attribute below is already correct by the time
+  // hydration completes, well before anyone could tap the attach button.
+  const [platform] = useState<Platform>(() => detectPlatform());
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -175,6 +183,15 @@ export function ChatWindow({
                 ref={fileInputRef}
                 type="file"
                 accept="image/*"
+                // iOS Safari's native picker already offers a clean
+                // "Photo Library / Take Photo" sheet with no `capture`
+                // attribute — adding one there actually removes the
+                // Photo Library option and jumps straight to the camera.
+                // Android's default chooser (Camera/Files/Gallery apps)
+                // is messier without it, so `capture="environment"` there
+                // gets a cleaner combined camera/gallery quick-access UI.
+                // Desktop web has no camera to hint at either way.
+                capture={platform === "android" ? "environment" : undefined}
                 className="hidden"
                 onChange={(e) => setPendingImage(e.target.files?.[0] ?? null)}
               />

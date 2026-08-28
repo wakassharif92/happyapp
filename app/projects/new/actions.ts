@@ -29,24 +29,27 @@ export async function createProject(
 
   const supabase = await createClient();
   const companyId = await getCurrentCompanyId();
-  const { data, error } = await supabase
-    .from("projects")
-    .insert({
-      company_id: companyId,
-      name,
-      description,
-      app_type,
-      platform: app_type === "mobile" ? platform : null,
-      framework,
-      codebase_path,
-      requirements_doc_ref,
-      automation_target,
-    })
-    .select("id")
-    .single();
+  const { error } = await supabase.from("projects").insert({
+    company_id: companyId,
+    name,
+    description,
+    app_type,
+    platform: app_type === "mobile" ? platform : null,
+    framework,
+    codebase_path,
+    requirements_doc_ref,
+    automation_target,
+  });
 
   if (error) return { error: error.message };
 
-  // REQ-074: land on the (empty) Modules page after creation.
-  redirect(`/projects/${data.id}/modules`);
+  // Was `/projects/${data.id}/modules` (REQ-074) — a leftover from before
+  // the HappyApp rebrand, when the legacy per-project nav (bare project
+  // switcher + Links, no branding) was still the primary experience. That
+  // now dumps a brand-new signup straight into an unbranded screen right
+  // after their first project — /dashboard (the actual HappyApp Issue
+  // Board) is the real landing point now; the Modules/Testing pages are
+  // still reachable from there for anyone who needs the automated-testing
+  // pipeline.
+  redirect("/dashboard");
 }
