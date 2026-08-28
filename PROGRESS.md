@@ -295,11 +295,23 @@ A large batch, resolved via two clarifying questions before writing schema (both
 
 `tsc`/`eslint`/`next build` all clean. **Migration 0017 has not been applied yet** — none of this has been exercised against the real database.
 
+### 29. Letting an external AI tool report back (REQ-155 extension, migration 0018 — new)
+Follow-up to §28: the user asked whether Claude/Codex, after fixing an issue from a Vibe Coding PDF, could actually update HappyApp themselves. Answer was no (the PDF is a static, one-way text file — no credential, no endpoint) — so built the missing piece, deliberately keeping the PDF description-only per the original ask by putting the callback instructions in a **separate** copyable block next to it, not inside the PDF.
+
+**`projects.api_token`** (migration 0018, `uuid default gen_random_uuid()` — every project gets one automatically, existing and new) scopes a new unauthenticated-by-session endpoint, **`POST /api/vibe-coding/issues/[issueId]`** (`proxy.ts` exempted, same "server calling in" reasoning as the Slack/WhatsApp webhooks) — deliberately narrow: it can only move the issue to `ai_fix` and leave a comment with the AI's summary, nothing else (can't close/delete, can't touch another project). `VibeCodingPanel.tsx` shows the exact `curl` command (real token + issue id filled in) once an issue is selected, for the dev to hand their AI tool directly — if the AI runs it after finishing, the issue lands in AI Fix with its own summary attached as a note automatically.
+
+**AI Fix tab got the verify/fix/retry loop made explicit**: `IssueCard.tsx` shows a "Verify needed" badge on any `ai_fix`-tab issue, plus two one-click actions that were previously only reachable through the generic move dropdown — **Mark as Fixed** (→ `done`) and **Send back to Vibe Coding** (→ `pending`, so the dev adds a note explaining what's still wrong via the existing comment system, then re-picks the issue in Vibe Coding — REQ-155's existing comment-trail-folding already carries that note into the next PDF).
+
+No token-rotation UI yet (the default-generated token can't currently be regenerated from the app if it needs invalidating) — worth adding if this sees real use.
+
+`tsc`/`eslint`/`next build` all clean. **Migration 0018 has not been applied yet.**
+
 ---
 
 ## Pending / not built
 
-- **§28's migration (`0017_documents_features_notes_tasks.sql`) needs to be applied** before any of Documents/Features/Suggestions/Notes/Personal Tasks/Vibe Coding can actually be used — apply, then walk through each surface once for real (add a document as admin, confirm a non-admin can't; add a feature/suggestion from both the tab and the Add popup; convert an issue to a feature via MoveToMenu; add a personal note/task and confirm they don't leak between members; generate a PDF from Vibe Coding, send an issue to AI Fix, add a verification comment, and confirm a re-generated PDF includes it).
+- **Migrations `0017` and `0018` need to be applied** (in that order) before any of Documents/Features/Suggestions/Notes/Personal Tasks/Vibe Coding/the AI-fix-callback endpoint can actually be used — apply, then walk through each surface once for real (see §28/§29 for the specific things to check, including a real curl call to `/api/vibe-coding/issues/[issueId]` with a project's real `api_token`).
+- **No way to regenerate a project's `api_token`** if it ever needs invalidating (§29) — would need a small admin-only action + button, likely on the Settings or Documents page.
 - The CoachPro-inspired visual redesign (Part E) hasn't been started.
 - **Full browser-level verification of the invite-claim flow is still open** — confirmed the underlying RLS/DB mechanics directly (see §27), but nobody has clicked through the actual `/invite/[token]` → Google consent → landing-in-the-right-company path in a real browser yet, since that requires a second real Google account. Worth doing once there's an actual second team member to invite for real.
 

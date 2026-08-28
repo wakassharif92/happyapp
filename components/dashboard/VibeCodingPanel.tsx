@@ -40,6 +40,8 @@ export function VibeCodingPanel({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [devDescription, setDevDescription] = useState("");
   const [generating, setGenerating] = useState(false);
+  const [apiToken, setApiToken] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (sourceType === "issue") return;
@@ -58,6 +60,25 @@ export function VibeCodingPanel({
       cancelled = true;
     };
   }, [sourceType, projectId]);
+
+  // The project's api_token — used only to build the curl command below,
+  // never sent anywhere itself (this component never calls the endpoint,
+  // it just shows the dev the command to hand their AI tool).
+  useEffect(() => {
+    let cancelled = false;
+    const supabase = createClient();
+    supabase
+      .from("projects")
+      .select("api_token")
+      .eq("id", projectId)
+      .single()
+      .then(({ data }) => {
+        if (!cancelled) setApiToken(data?.api_token ?? null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
 
   const items = useMemo(() => {
     if (sourceType === "issue") {
@@ -113,6 +134,22 @@ export function VibeCodingPanel({
     } finally {
       setGenerating(false);
     }
+  }
+
+  const curlCommand = useMemo(() => {
+    if (!selectedId || sourceType !== "issue" || !apiToken) return null;
+    const origin = process.env.NEXT_PUBLIC_APP_URL || (typeof window !== "undefined" ? window.location.origin : "");
+    return `curl -X POST ${origin}/api/vibe-coding/issues/${selectedId} \\
+  -H "Authorization: Bearer ${apiToken}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"summary": "Describe what you changed here"}'`;
+  }, [selectedId, sourceType, apiToken]);
+
+  function copyCurlCommand() {
+    if (!curlCommand) return;
+    navigator.clipboard?.writeText(curlCommand).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
   }
 
   return (
@@ -205,6 +242,23 @@ export function VibeCodingPanel({
               </button>
             )}
           </div>
+        </div>
+      )}
+
+      {curlCommand && (
+        <div className="card flex flex-col gap-2 p-4">
+          <p className="text-sm font-medium text-slate-700">Report completion (optional)</p>
+          <p className="text-xs text-slate-500">
+            Hand this to your AI coding tool separately from the PDF — if it runs this when done,
+            the issue moves straight to AI Fix here for you to verify, with its summary attached
+            as a note.
+          </p>
+          <pre className="overflow-x-auto whitespace-pre-wrap rounded-lg bg-slate-900 p-3 text-xs text-slate-100">
+            {curlCommand}
+          </pre>
+          <button type="button" onClick={copyCurlCommand} className="btn-secondary self-start">
+            {copied ? "Copied!" : "Copy command"}
+          </button>
         </div>
       )}
     </div>

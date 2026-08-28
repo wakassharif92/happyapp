@@ -28,6 +28,9 @@ export async function proxy(request: NextRequest) {
   // OAuth flow. /invite/[token] is public the same way /support and
   // /report are — anyone with the link needs to reach the "sign in with
   // Google to claim this invite" page before they have any session at all.
+  // Section 17 (REQ-155): /api/vibe-coding/* has no session either — an
+  // external AI coding tool calls in with the project's api_token, same
+  // "server calling in" reasoning as the Slack/WhatsApp webhooks above.
   if (
     request.nextUrl.pathname.startsWith("/api/webhooks/whatsapp") ||
     request.nextUrl.pathname.startsWith("/team-report") ||
@@ -35,7 +38,8 @@ export async function proxy(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/support/") ||
     request.nextUrl.pathname.startsWith("/report/") ||
     request.nextUrl.pathname.startsWith("/auth/callback") ||
-    request.nextUrl.pathname.startsWith("/invite/")
+    request.nextUrl.pathname.startsWith("/invite/") ||
+    request.nextUrl.pathname.startsWith("/api/vibe-coding/")
   ) {
     return NextResponse.next({ request });
   }

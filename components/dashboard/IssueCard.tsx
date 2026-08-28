@@ -33,6 +33,7 @@ export function IssueCard({
 }) {
   const [copied, setCopied] = useState(false);
   const isComplaint = issue.tab === "user_complaints";
+  const isAiFix = issue.tab === "ai_fix";
 
   return (
     <div
@@ -61,6 +62,11 @@ export function IssueCard({
               />
             )}
             <StatusBadge tab={issue.tab} />
+            {isAiFix && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                Verify needed
+              </span>
+            )}
             {isComplaint && issue.severity && <SeverityTag severity={issue.severity} />}
           </div>
         </div>
@@ -94,6 +100,26 @@ export function IssueCard({
               >
                 Convert to Dev Issue
               </button>
+            )}
+            {isAiFix && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onMove(issue.id, "done")}
+                  title="Verified — the fix actually works"
+                  className="mr-1 rounded-md border border-emerald-200 px-2 py-1 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-50"
+                >
+                  Mark as Fixed
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onMove(issue.id, "pending")}
+                  title="Not actually fixed — add a note explaining why, then send back for another attempt"
+                  className="mr-1 rounded-md border border-[var(--db-border)] px-2 py-1 text-xs font-medium text-[var(--db-fg-muted)] transition-colors hover:border-[var(--db-border-strong)] hover:text-[var(--db-fg)]"
+                >
+                  Send back to Vibe Coding
+                </button>
+              </>
             )}
             <button
               type="button"

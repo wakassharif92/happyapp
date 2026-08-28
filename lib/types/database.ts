@@ -59,6 +59,10 @@ export type Project = {
   codebase_path: string | null;
   requirements_doc_ref: string | null;
   automation_target: string | null;
+  // Section 17 (REQ-155): lets an external AI coding tool report back
+  // ("mark as needs verification") without a user session — scoped to
+  // this one project, can only move an issue to ai_fix + leave a comment.
+  api_token: string;
   created_at: string;
 };
 
