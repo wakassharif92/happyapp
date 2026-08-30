@@ -95,10 +95,23 @@ export function DashboardClient({
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "board_issues" },
-        (payload) => {
+        async (payload) => {
           const row = payload.new as BoardIssue;
+          // media_url on a fresh Realtime row is still the raw private
+          // Storage path (whatever the inserting side wrote), not a
+          // signed URL — app/dashboard/page.tsx resolves that for the
+          // initial page load, but a row that arrives live never goes
+          // through that path, so it rendered as a broken image until a
+          // manual refresh. Resolve it here the same way.
+          let resolvedRow = row;
+          if (row.media_url) {
+            const { data } = await supabase.storage
+              .from("whatsapp-media")
+              .createSignedUrl(row.media_url, 60 * 60);
+            if (data?.signedUrl) resolvedRow = { ...row, media_url: data.signedUrl };
+          }
           setIssues((prev) =>
-            prev.some((i) => i.id === row.id) ? prev : [toUiIssue(row), ...prev]
+            prev.some((i) => i.id === resolvedRow.id) ? prev : [toUiIssue(resolvedRow), ...prev]
           );
         }
       )
