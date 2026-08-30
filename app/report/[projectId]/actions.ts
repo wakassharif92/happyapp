@@ -4,23 +4,25 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export type SubmitTeamReportState = { error?: string; success?: boolean } | undefined;
 
-// Section 14: writes directly into board_issues (tab: 'pending',
-// source_channel: 'Team Report') rather than the legacy team_reports
-// table — the whole point of this project-scoped link is that
-// submissions land on that project's Issue Board like every other intake
-// channel (Slack, staff-created). Admin client: no user session on a
-// public route, same pattern as app/team-report/actions.ts.
+// Section 14/17: writes into board_issues (tab: 'pending', source_channel:
+// 'Team Report') for an Issue report, or straight into feature_requests
+// (kind: 'feature'|'suggestion') when the reporter picks one of those
+// instead — same project-scoped public form, routed to whichever table
+// actually matches what's being reported, rather than everything landing
+// in the Issue Board like before this dropdown existed. Admin client: no
+// user session on a public route, same pattern as app/team-report/actions.ts.
 export async function submitTeamReport(
   projectId: string,
   _prevState: SubmitTeamReportState,
   formData: FormData
 ): Promise<SubmitTeamReportState> {
+  const type = (formData.get("type") as string) || "issue";
   const senderName = (formData.get("sender_name") as string)?.trim();
   const messageText = (formData.get("message_text") as string)?.trim();
   const image = formData.get("image") as File | null;
 
   if (!senderName) return { error: "Your name is required." };
-  if (!messageText) return { error: "Describe the issue." };
+  if (!messageText) return { error: "Please describe it." };
 
   const supabase = createAdminClient();
 
@@ -34,6 +36,25 @@ export async function submitTeamReport(
     .single();
   if (!project) return { error: "Project not found" };
 
+  // Same 60-char title derivation the Slack ingestion route uses
+  // (app/api/slack/events/route.ts), kept consistent across every
+  // channel that creates a title from free-text.
+  const title =
+    messageText.length > 60 ? `${messageText.slice(0, 60)}…` : messageText;
+
+  if (type === "feature" || type === "suggestion") {
+    const { error } = await supabase.from("feature_requests").insert({
+      company_id: project.company_id,
+      project_id: projectId,
+      kind: type,
+      title,
+      description: messageText,
+      created_by: senderName,
+    });
+    if (error) return { error: error.message };
+    return { success: true };
+  }
+
   let mediaPath: string | null = null;
   let mediaType: "image" | "none" = "none";
 
@@ -46,12 +67,6 @@ export async function submitTeamReport(
     if (uploadError) return { error: uploadError.message };
     mediaType = "image";
   }
-
-  // Same 60-char title derivation the Slack ingestion route uses
-  // (app/api/slack/events/route.ts), kept consistent across every
-  // channel that creates board_issues from free-text.
-  const title =
-    messageText.length > 60 ? `${messageText.slice(0, 60)}…` : messageText;
 
   const { data: issue, error } = await supabase
     .from("board_issues")

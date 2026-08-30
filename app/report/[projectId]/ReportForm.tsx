@@ -1,7 +1,13 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import type { SubmitTeamReportState } from "./actions";
+
+const WHATS_WRONG_LABEL: Record<string, string> = {
+  issue: "What's wrong?",
+  feature: "What feature would you like?",
+  suggestion: "What's your suggestion?",
+};
 
 export function ReportForm({
   action,
@@ -15,6 +21,7 @@ export function ReportForm({
     SubmitTeamReportState,
     FormData
   >(action, undefined);
+  const [type, setType] = useState("issue");
 
   if (state?.success) {
     return (
@@ -36,6 +43,19 @@ export function ReportForm({
 
   return (
     <form action={formAction} className="flex flex-col gap-5">
+      <Field label="Type">
+        <select
+          name="type"
+          value={type}
+          onChange={(e) => setType(e.target.value)}
+          className="input"
+        >
+          <option value="issue">Issue</option>
+          <option value="feature">Feature</option>
+          <option value="suggestion">Suggestion</option>
+        </select>
+      </Field>
+
       <Field label="Your name">
         <input
           name="sender_name"
@@ -45,7 +65,7 @@ export function ReportForm({
         />
       </Field>
 
-      <Field label="What's wrong?">
+      <Field label={WHATS_WRONG_LABEL[type]}>
         <textarea
           name="message_text"
           required
@@ -55,9 +75,11 @@ export function ReportForm({
         />
       </Field>
 
-      <Field label="Screenshot (optional)">
-        <input name="image" type="file" accept="image/*" className="input" />
-      </Field>
+      {type === "issue" && (
+        <Field label="Screenshot (optional)">
+          <input name="image" type="file" accept="image/*" className="input" />
+        </Field>
+      )}
 
       {state?.error && <p className="text-sm text-red-600">{state.error}</p>}
 
