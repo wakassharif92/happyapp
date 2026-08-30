@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Category, Issue, TabKey } from "@/lib/board/types";
 import { TAB_LABELS, TAB_ORDER } from "@/lib/board/types";
 import { initials } from "@/lib/board/format";
@@ -36,6 +36,16 @@ export function IssueDetailPanel({
 }) {
   const [draft, setDraft] = useState("");
   const [copied, setCopied] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+
+  useEffect(() => {
+    if (!lightboxOpen) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setLightboxOpen(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [lightboxOpen]);
 
   if (!issue) return null;
   const isComplaint = issue.tab === "user_complaints";
@@ -65,12 +75,27 @@ export function IssueDetailPanel({
         </div>
 
         <div className="flex flex-col gap-5 p-4">
-          <Thumbnail
-            mediaType={issue.mediaType}
-            color={issue.thumbnailColor}
-            mediaUrl={issue.mediaUrl}
-            size="lg"
-          />
+          {issue.mediaType === "image" && issue.mediaUrl ? (
+            <button
+              type="button"
+              onClick={() => setLightboxOpen(true)}
+              className="cursor-zoom-in text-left"
+            >
+              <Thumbnail
+                mediaType={issue.mediaType}
+                color={issue.thumbnailColor}
+                mediaUrl={issue.mediaUrl}
+                size="lg"
+              />
+            </button>
+          ) : (
+            <Thumbnail
+              mediaType={issue.mediaType}
+              color={issue.thumbnailColor}
+              mediaUrl={issue.mediaUrl}
+              size="lg"
+            />
+          )}
 
           <div>
             <h2 className="text-lg font-semibold text-[var(--db-fg)]">{issue.title}</h2>
@@ -221,6 +246,29 @@ export function IssueDetailPanel({
           </div>
         </div>
       </div>
+
+      {lightboxOpen && issue.mediaUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+          onClick={() => setLightboxOpen(false)}
+        >
+          <button
+            type="button"
+            onClick={() => setLightboxOpen(false)}
+            title="Close"
+            className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+          >
+            <IconClose className="h-5 w-5" />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={issue.mediaUrl}
+            alt={issue.title}
+            className="max-h-full max-w-full rounded-lg object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </>
   );
 }

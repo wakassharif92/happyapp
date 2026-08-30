@@ -197,6 +197,11 @@ export type BoardIssue = {
   // Independent from support_conversations.last_read_at (the agent's own
   // read-cursor for the same conversation) — devs are a separate viewer.
   dev_last_read_at: string | null;
+  // Manual priority order (migration 0019) — higher sorts first within a
+  // tab. Backfilled from created_at, so unreordered issues keep today's
+  // newest-first order; a swap between two adjacent issues just exchanges
+  // their values.
+  sort_order: number;
   created_at: string;
   updated_at: string;
 };

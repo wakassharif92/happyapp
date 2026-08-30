@@ -9,25 +9,30 @@ import { CategoryDropdown } from "./CategoryDropdown";
 import { MoveToMenu } from "./MoveToMenu";
 import { SeverityTag } from "./SeverityTag";
 import { StatusBadge } from "./StatusBadge";
-import { Thumbnail } from "./Thumbnail";
-import { IconCopy, IconExpand } from "./icons";
+import { IconArrowDown, IconArrowUp, IconCopy, IconExpand } from "./icons";
 
 export function IssueCard({
   issue,
   hasUnreadDevReply = false,
+  canMoveUp = true,
+  canMoveDown = true,
   onOpenDetail,
   onCategoryChange,
   onMove,
   onConvert,
+  onReorder,
   onCopyLink,
   onConvertToDev,
 }: {
   issue: Issue;
   hasUnreadDevReply?: boolean;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
   onOpenDetail: (id: string) => void;
   onCategoryChange: (id: string, category: Category) => void;
   onMove: (id: string, tab: TabKey) => void;
   onConvert?: (id: string, kind: FeatureRequestKind) => void;
+  onReorder: (id: string, direction: "up" | "down") => void;
   onCopyLink: (id: string) => void;
   onConvertToDev: (id: string) => void;
 }) {
@@ -37,12 +42,34 @@ export function IssueCard({
 
   return (
     <div
-      onClick={() => onOpenDetail(issue.id)}
-      className={`group flex cursor-pointer gap-3 rounded-xl border bg-[var(--db-surface)] p-3 transition-colors hover:border-[var(--db-border-strong)] sm:gap-4 sm:p-4 ${
+      className={`group flex gap-3 rounded-xl border bg-[var(--db-surface)] p-3 transition-colors hover:border-[var(--db-border-strong)] sm:gap-4 sm:p-4 ${
         isComplaint ? "border-[var(--status-complaint-fg)]/30" : "border-[var(--db-border)]"
       }`}
     >
-      <Thumbnail mediaType={issue.mediaType} color={issue.thumbnailColor} />
+      {/* Manual priority order — swaps this issue's position with its
+          neighbor within the current tab (DashboardClient.tsx's
+          handleReorder). Replaces the old thumbnail here; the full image
+          only shows in the detail panel now. */}
+      <div className="flex shrink-0 flex-col items-center justify-center gap-0.5">
+        <button
+          type="button"
+          onClick={() => onReorder(issue.id, "up")}
+          disabled={!canMoveUp}
+          title="Move up in priority"
+          className="flex h-6 w-6 items-center justify-center rounded-md text-[var(--db-fg-subtle)] transition-colors hover:bg-[var(--db-surface-hover)] hover:text-[var(--db-fg)] disabled:opacity-30"
+        >
+          <IconArrowUp className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => onReorder(issue.id, "down")}
+          disabled={!canMoveDown}
+          title="Move down in priority"
+          className="flex h-6 w-6 items-center justify-center rounded-md text-[var(--db-fg-subtle)] transition-colors hover:bg-[var(--db-surface-hover)] hover:text-[var(--db-fg)] disabled:opacity-30"
+        >
+          <IconArrowDown className="h-4 w-4" />
+        </button>
+      </div>
 
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -71,10 +98,10 @@ export function IssueCard({
           </div>
         </div>
 
-        <div>
+        <button type="button" onClick={() => onOpenDetail(issue.id)} className="text-left">
           <p className="truncate text-sm font-semibold text-[var(--db-fg)]">{issue.title}</p>
           <p className="line-clamp-2 text-sm text-[var(--db-fg-muted)]">{issue.message}</p>
-        </div>
+        </button>
 
         <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -91,7 +118,7 @@ export function IssueCard({
             </span>
           </div>
 
-          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-1">
             {isComplaint && (
               <button
                 type="button"
@@ -141,10 +168,10 @@ export function IssueCard({
             <button
               type="button"
               onClick={() => onOpenDetail(issue.id)}
-              title="Open detail"
-              className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--db-fg-subtle)] transition-colors hover:bg-[var(--db-surface-hover)] hover:text-[var(--db-fg)]"
+              className="flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-[var(--db-fg-subtle)] transition-colors hover:bg-[var(--db-surface-hover)] hover:text-[var(--db-fg)]"
             >
               <IconExpand className="h-4 w-4" />
+              Details
             </button>
             <MoveToMenu
               currentTab={issue.tab}

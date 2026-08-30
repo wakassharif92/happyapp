@@ -51,6 +51,7 @@ export type Issue = {
   ticketNumber: number | null;
   supportConversationId: string | null;
   devLastReadAt: string | null;
+  sortOrder: number;
 };
 
 export type Project = {

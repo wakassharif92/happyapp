@@ -306,11 +306,20 @@ No token-rotation UI yet (the default-generated token can't currently be regener
 
 `tsc`/`eslint`/`next build` all clean. **Migration 0018 has not been applied yet.**
 
+### 30. Manual issue priority reordering + Details button + image lightbox (qa-agent-spec.md new section — new, migration 0019)
+Three related IssueCard/detail-panel changes from real usage feedback:
+
+- **Reordering**: `board_issues.sort_order` (migration 0019, backfilled from `created_at` so existing lists keep today's order until someone actually reorders) — up/down arrow buttons now sit where the card's thumbnail used to be, swapping the issue's `sort_order` with whichever neighbor is directly above/below it in the *currently visible* (filtered) list (`app/dashboard/actions.ts`'s `reorderIssues`, just two UPDATEs). `visibleIssues` now sorts by `sort_order desc` first, `created_at desc` as a tiebreaker.
+- **Explicit "Details" button**: the whole card was previously one big click target (`onClick` on the outer div) opening the detail panel — removed in favor of a labeled "Details" button plus the title/message block itself still being clickable, since the card's left edge is now interactive (the reorder arrows) and a stray click there shouldn't accidentally open the panel.
+- **Image lightbox in the detail panel**: the large `Thumbnail` at the top of `IssueDetailPanel.tsx` is now tappable when there's a real image, opening the same full-screen lightbox pattern already proven in `ChatWindow.tsx` (Escape key, backdrop click, close button) — previously it was a static, non-interactive image.
+
+`tsc`/`eslint`/`next build` all clean. **Migration 0019 has not been applied yet.**
+
 ---
 
 ## Pending / not built
 
-- **Migrations `0017` and `0018` need to be applied** (in that order) before any of Documents/Features/Suggestions/Notes/Personal Tasks/Vibe Coding/the AI-fix-callback endpoint can actually be used — apply, then walk through each surface once for real (see §28/§29 for the specific things to check, including a real curl call to `/api/vibe-coding/issues/[issueId]` with a project's real `api_token`).
+- **Migrations `0017`, `0018`, and `0019` need to be applied** (in that order) — `0017`/`0018` appear to already be in use based on recent activity (Team Report/Feature submissions and the image-resolution bug both involved live `board_issues`/`feature_requests` rows), but `0019` (sort_order for manual reordering, §30) is confirmed not yet applied. Walk through each surface once for real once applied, including the up/down reorder arrows and the detail-panel image lightbox.
 - **No way to regenerate a project's `api_token`** if it ever needs invalidating (§29) — would need a small admin-only action + button, likely on the Settings or Documents page.
 - The CoachPro-inspired visual redesign (Part E) hasn't been started.
 - **Full browser-level verification of the invite-claim flow is still open** — confirmed the underlying RLS/DB mechanics directly (see §27), but nobody has clicked through the actual `/invite/[token]` → Google consent → landing-in-the-right-company path in a real browser yet, since that requires a second real Google account. Worth doing once there's an actual second team member to invite for real.

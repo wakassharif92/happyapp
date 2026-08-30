@@ -27,6 +27,24 @@ export async function moveIssue(issueId: string, tab: TabKey) {
   revalidatePath("/dashboard");
 }
 
+// Swaps two issues' sort_order values (migration 0019) — the whole of
+// "reordering" is just this one pair-swap; DashboardClient.tsx's
+// handleReorder figures out which two ids/values to swap from whatever's
+// currently adjacent on screen.
+export async function reorderIssues(
+  issueIdA: string,
+  sortOrderA: number,
+  issueIdB: string,
+  sortOrderB: number
+) {
+  const supabase = await createClient();
+  await Promise.all([
+    supabase.from("board_issues").update({ sort_order: sortOrderA }).eq("id", issueIdA),
+    supabase.from("board_issues").update({ sort_order: sortOrderB }).eq("id", issueIdB),
+  ]);
+  revalidatePath("/dashboard");
+}
+
 export async function addComment(
   issueId: string,
   text: string

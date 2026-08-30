@@ -28,6 +28,7 @@ import {
   createIssue,
   getIssueThread,
   moveIssue,
+  reorderIssues,
   updateIssueCategory,
 } from "./actions";
 
@@ -51,6 +52,7 @@ function toUiIssue(row: BoardIssue): Issue {
     ticketNumber: row.ticket_number,
     supportConversationId: row.support_conversation_id,
     devLastReadAt: row.dev_last_read_at,
+    sortOrder: row.sort_order,
   };
 }
 
@@ -216,7 +218,11 @@ export function DashboardClient({
           i.message.toLowerCase().includes(q) ||
           i.senderName.toLowerCase().includes(q)
       )
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      .sort(
+        (a, b) =>
+          b.sortOrder - a.sortOrder ||
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
   }, [projectIssues, activeView, search]);
 
   const selectedIssue = issues.find((i) => i.id === selectedIssueId) ?? null;
@@ -284,6 +290,22 @@ export function DashboardClient({
 
   function handleConvertToDev(id: string) {
     handleMove(id, "pending");
+  }
+
+  // Swaps the issue's sort_order with its neighbor within the CURRENTLY
+  // VISIBLE (filtered/sorted) list — not the whole project — so "move up"
+  // always means "swap with whatever's directly above it on screen right
+  // now," matching what the arrow buttons visually promise.
+  function handleReorder(id: string, direction: "up" | "down") {
+    const idx = visibleIssues.findIndex((i) => i.id === id);
+    if (idx === -1) return;
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= visibleIssues.length) return;
+    const a = visibleIssues[idx];
+    const b = visibleIssues[swapIdx];
+    updateIssueLocal(a.id, (i) => ({ ...i, sortOrder: b.sortOrder }));
+    updateIssueLocal(b.id, (i) => ({ ...i, sortOrder: a.sortOrder }));
+    reorderIssues(a.id, b.sortOrder, b.id, a.sortOrder);
   }
 
   function handleCopyLink(id: string) {
@@ -433,15 +455,18 @@ export function DashboardClient({
                 {visibleIssues.length === 0 ? (
                   <EmptyState tab={activeView} />
                 ) : (
-                  visibleIssues.map((issue) => (
+                  visibleIssues.map((issue, index) => (
                     <IssueCard
                       key={issue.id}
                       issue={issue}
                       hasUnreadDevReply={unreadDevReplyIds.has(issue.id)}
+                      canMoveUp={index > 0}
+                      canMoveDown={index < visibleIssues.length - 1}
                       onOpenDetail={setSelectedIssueId}
                       onCategoryChange={handleCategoryChange}
                       onMove={handleMove}
                       onConvert={handleConvert}
+                      onReorder={handleReorder}
                       onCopyLink={handleCopyLink}
                       onConvertToDev={handleConvertToDev}
                     />
