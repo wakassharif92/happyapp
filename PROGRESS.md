@@ -329,11 +329,24 @@ A batch of smaller fixes and refinements caught through real usage, none requiri
 
 `tsc`/`eslint`/`next build` all clean.
 
+### 32. "Later On" kind (feature_requests, migration 0020 — new)
+A third `feature_requests.kind` alongside `feature`/`suggestion` (§28), for items the dev wants to track but is deliberately deferring rather than acting on now — distinct from a feature idea or a suggestion. Reuses the exact same table/RLS/status machinery, no new schema besides widening the `kind` check constraint (`0020_feature_requests_later_on_kind.sql`).
+
+Wired into every place Feature/Suggestion already appear, so nothing net-new had to be built:
+- **TopBar's "Add" popover** — now Issue/Feature/Suggestion/Later On (`AddKind` widened in `TopBar.tsx`).
+- **The dev-side "Move to…" menu on an issue card** (`MoveToMenu.tsx`) — gained "Move to Later On", alongside the existing "Move to Feature"/"Move to Suggestion".
+- **A new sidebar tab**, "Later On" (`lib/board/types.ts`'s `ExtraView`/`EXTRA_VIEW_ORDER`/`VIEW_LABELS`, positioned right after Suggestions), rendered by the same `FeaturesPanel.tsx` component already shared by Features/Suggestions — just a third `kind` value. New `IconHourglass` (`icons.tsx`) for its sidebar icon.
+- **Vibe Coding's type filter and numbering** — `VibeCodingPanel.tsx`'s `SourceType`/`KIND_LABEL`/`PickerItem.kind` all widened to include `later_on`, so a Later On item can be picked and exported into an AI PDF the same as a Feature/Suggestion, with its own stable "Later On N" numbering.
+
+The three places that used to hardcode `kind === "feature" ? "Feature" : "Suggestion"`-style ternaries (`featuresActions.ts`, `DashboardClient.tsx`'s `handleSubmitFeature`/`handleConvert`) now read from one shared `FEATURE_REQUEST_KIND_LABELS` map (`lib/types/database.ts`) instead of a third hardcoded ternary branch each.
+
+`tsc`/`eslint`/`next build` all clean. **Migration 0020 has not been applied yet.**
+
 ---
 
 ## Pending / not built
 
-- **Migrations `0017`, `0018`, and `0019` need to be applied** (in that order) — `0017`/`0018` appear to already be in use based on recent activity (Team Report/Feature submissions and the image-resolution bug both involved live `board_issues`/`feature_requests` rows), but `0019` (sort_order for manual reordering, §30) is confirmed not yet applied. Walk through each surface once for real once applied, including the up/down reorder arrows and the detail-panel image lightbox.
+- **Migrations `0017`, `0018`, `0019`, and `0020` need to be applied** (in that order) — `0017`/`0018` appear to already be in use based on recent activity (Team Report/Feature submissions and the image-resolution bug both involved live `board_issues`/`feature_requests` rows), but `0019` (sort_order for manual reordering, §30) and `0020` (the "Later On" kind, §32) are confirmed not yet applied. Walk through each surface once for real once applied, including the up/down reorder arrows, the detail-panel image lightbox, and adding/converting an issue to a Later On item.
 - **No way to regenerate a project's `api_token`** if it ever needs invalidating (§29) — would need a small admin-only action + button, likely on the Settings or Documents page.
 - The CoachPro-inspired visual redesign (Part E) hasn't been started.
 - **Full browser-level verification of the invite-claim flow is still open** — confirmed the underlying RLS/DB mechanics directly (see §27), but nobody has clicked through the actual `/invite/[token]` → Google consent → landing-in-the-right-company path in a real browser yet, since that requires a second real Google account. Worth doing once there's an actual second team member to invite for real.
