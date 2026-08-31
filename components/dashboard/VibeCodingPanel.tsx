@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Issue, TabKey } from "@/lib/board/types";
 import { TAB_LABELS, TAB_ORDER } from "@/lib/board/types";
 import type { FeatureRequest } from "@/lib/types/database";
+import { IconClose } from "./icons";
 
 type SourceType = "issue" | "feature" | "suggestion" | "all";
 type StatusFilter = TabKey | "all";
@@ -48,6 +49,16 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
   const [descriptionEdits, setDescriptionEdits] = useState<Map<string, string>>(new Map());
   const [generating, setGenerating] = useState(false);
   const [apiToken, setApiToken] = useState<string | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!lightboxUrl) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setLightboxUrl(null);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [lightboxUrl]);
 
   // Fetches every kind unconditionally (not re-fetched per sourceType) —
   // both so switching the type filter is instant, and so a selection made
@@ -404,10 +415,35 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
                       {item.kind}
                     </span>
                   )}
+                  {item.kind === "issue" && item.mediaType === "image" && item.mediaUrl && (
+                    <span
+                      title="Has an attached screenshot"
+                      className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-600"
+                    >
+                      📷
+                    </span>
+                  )}
                 </div>
 
                 {isExpanded && (
-                  <div className="flex flex-col gap-1.5 border-t border-slate-100 p-3.5">
+                  <div className="flex flex-col gap-3 border-t border-slate-100 p-3.5">
+                    {item.kind === "issue" && item.mediaType === "image" && item.mediaUrl && (
+                      <div>
+                        <label className="text-xs font-medium text-slate-500">Screenshot</label>
+                        <button
+                          type="button"
+                          onClick={() => setLightboxUrl(item.mediaUrl!)}
+                          className="mt-1 block cursor-zoom-in"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={item.mediaUrl}
+                            alt="Attached to issue"
+                            className="max-h-48 rounded-lg border border-slate-200 object-contain"
+                          />
+                        </button>
+                      </div>
+                    )}
                     <label className="text-xs font-medium text-slate-500">Dev Description</label>
                     <textarea
                       value={descriptionEdits.get(item.id) ?? ""}
@@ -424,6 +460,29 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
           })
         )}
       </div>
+
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setLightboxUrl(null)}
+            title="Close"
+            className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+          >
+            <IconClose className="h-5 w-5" />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={lightboxUrl}
+            alt="Attachment, full size"
+            className="max-h-full max-w-full rounded-lg object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }
