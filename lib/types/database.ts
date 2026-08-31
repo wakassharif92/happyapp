@@ -296,8 +296,14 @@ export type Document = {
   created_at: string;
 };
 
-export type FeatureRequestKind = "feature" | "suggestion";
+export type FeatureRequestKind = "feature" | "suggestion" | "later_on";
 export type FeatureRequestStatus = "pending" | "in_progress" | "done";
+
+export const FEATURE_REQUEST_KIND_LABELS: Record<FeatureRequestKind, string> = {
+  feature: "Feature",
+  suggestion: "Suggestion",
+  later_on: "Later On",
+};
 
 export type FeatureRequest = {
   id: string;

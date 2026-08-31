@@ -89,7 +89,13 @@ export const TAB_LABELS: Record<TabKey, string> = {
 // explicitly described all four as "tabs," even though the underlying
 // data source differs — DashboardClient.tsx branches on which kind of
 // view is active to decide what to render in the main content area.
-export type ExtraView = "features" | "suggestions" | "notes" | "personal_tasks" | "vibe_coding";
+export type ExtraView =
+  | "features"
+  | "suggestions"
+  | "later_on"
+  | "notes"
+  | "personal_tasks"
+  | "vibe_coding";
 export type BoardView = TabKey | ExtraView;
 
 // Vibe Coding first — the tool most tightly coupled to the AI Fix loop
@@ -99,6 +105,7 @@ export const EXTRA_VIEW_ORDER: ExtraView[] = [
   "vibe_coding",
   "features",
   "suggestions",
+  "later_on",
   "notes",
   "personal_tasks",
 ];
@@ -109,6 +116,7 @@ export const VIEW_LABELS: Record<BoardView, string> = {
   ...TAB_LABELS,
   features: "Features",
   suggestions: "Suggestions",
+  later_on: "Later On",
   notes: "Notes",
   personal_tasks: "Personal Tasks",
   vibe_coding: "For Vibe Coding",

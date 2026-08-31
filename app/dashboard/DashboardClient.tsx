@@ -8,6 +8,7 @@ import { TAB_ORDER, isTabKey } from "@/lib/board/types";
 import { colorForId } from "@/lib/board/format";
 import { createClient } from "@/lib/supabase/client";
 import type { BoardIssue, FeatureRequestKind, SupportMessage } from "@/lib/types/database";
+import { FEATURE_REQUEST_KIND_LABELS } from "@/lib/types/database";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { TopBar, type AddKind } from "@/components/dashboard/TopBar";
 import { IssueCard } from "@/components/dashboard/IssueCard";
@@ -31,6 +32,17 @@ import {
   reorderIssues,
   updateIssueCategory,
 } from "./actions";
+
+const FEATURE_KIND_TO_VIEW: Record<FeatureRequestKind, BoardView> = {
+  feature: "features",
+  suggestion: "suggestions",
+  later_on: "later_on",
+};
+const VIEW_TO_FEATURE_KIND: Partial<Record<BoardView, FeatureRequestKind>> = {
+  features: "feature",
+  suggestions: "suggestion",
+  later_on: "later_on",
+};
 
 function toUiIssue(row: BoardIssue): Issue {
   return {
@@ -367,7 +379,7 @@ export function DashboardClient({
       title: input.title,
       description: input.description,
     });
-    setActiveView(addFeatureKind === "feature" ? "features" : "suggestions");
+    setActiveView(FEATURE_KIND_TO_VIEW[addFeatureKind]);
     setAddFeatureKind(null);
   }
 
@@ -385,7 +397,7 @@ export function DashboardClient({
         ...i.activity,
         {
           id: `local-${Date.now()}`,
-          text: `Converted to ${kind === "feature" ? "Feature" : "Suggestion"}`,
+          text: `Converted to ${FEATURE_REQUEST_KIND_LABELS[kind]}`,
           actor: "You",
           createdAt: new Date().toISOString(),
         },
@@ -474,10 +486,10 @@ export function DashboardClient({
                   ))
                 )}
               </div>
-            ) : activeView === "features" || activeView === "suggestions" ? (
+            ) : VIEW_TO_FEATURE_KIND[activeView] ? (
               <FeaturesPanel
                 projectId={currentProjectId}
-                kind={activeView === "features" ? "feature" : "suggestion"}
+                kind={VIEW_TO_FEATURE_KIND[activeView]!}
               />
             ) : activeView === "notes" ? (
               <NotesPanel projects={initialProjects} />

@@ -77,6 +77,16 @@ export function MoveToMenu({
                 >
                   Move to Suggestion
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onConvert("later_on");
+                    setOpen(false);
+                  }}
+                  className="block w-full px-3 py-1.5 text-left text-sm text-[var(--db-fg)] transition-colors hover:bg-[var(--db-surface-hover)]"
+                >
+                  Move to Later On
+                </button>
               </>
             )}
           </div>

@@ -429,6 +429,20 @@ export function IconUsers({ className = base }: IconProps) {
   );
 }
 
+export function IconHourglass({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path
+        d="M6 3h12M6 21h12M7 3c0 4 3 6 5 6.5C10 10 7 12 7 16v5h10v-5c0-4-3-6-5-6.5C14 9 17 7 17 3"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function IconInbox({ className = base }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className}>

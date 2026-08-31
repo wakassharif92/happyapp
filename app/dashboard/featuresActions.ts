@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentMember } from "@/lib/company";
 import type { FeatureRequestKind, FeatureRequestStatus } from "@/lib/types/database";
+import { FEATURE_REQUEST_KIND_LABELS } from "@/lib/types/database";
 
 // Any active company member can add/update — open, collaborative idea
 // tracking, not admin-gated like Documents (matches RLS: staff_all, not
@@ -79,7 +80,7 @@ export async function convertIssueToFeatureRequest(input: {
   await supabase.from("board_issue_activity").insert({
     company_id: member.companyId,
     issue_id: input.issueId,
-    text: `Converted to ${input.kind === "feature" ? "Feature" : "Suggestion"}`,
+    text: `Converted to ${FEATURE_REQUEST_KIND_LABELS[input.kind]}`,
     actor: member.name,
   });
 

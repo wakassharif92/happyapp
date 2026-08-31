@@ -4,7 +4,7 @@ import { signOut } from "@/app/login/actions";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { IconMoon, IconPlus, IconSearch, IconSun } from "./icons";
 
-export type AddKind = "issue" | "feature" | "suggestion";
+export type AddKind = "issue" | "feature" | "suggestion" | "later_on";
 
 export function TopBar({
   projects,
@@ -78,6 +78,7 @@ export function TopBar({
                     ["issue", "Issue"],
                     ["feature", "Feature"],
                     ["suggestion", "Suggestion"],
+                    ["later_on", "Later On"],
                   ] as const
                 ).map(([kind, label]) => (
                   <button

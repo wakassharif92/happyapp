@@ -4,9 +4,15 @@ import { useState } from "react";
 import type { FeatureRequestKind } from "@/lib/types/database";
 import { IconClose } from "./icons";
 
-// Opened from TopBar's "Add" popup (Issue/Feature/Suggestion) regardless
-// of which tab is currently active — matches SendToDevsModal.tsx's
-// established convention.
+const NOUN: Record<FeatureRequestKind, string> = {
+  feature: "feature",
+  suggestion: "suggestion",
+  later_on: "later on item",
+};
+
+// Opened from TopBar's "Add" popup (Issue/Feature/Suggestion/Later On)
+// regardless of which tab is currently active — matches
+// SendToDevsModal.tsx's established convention.
 export function AddFeatureModal({
   open,
   kind,
@@ -25,7 +31,7 @@ export function AddFeatureModal({
 
   if (!open) return null;
 
-  const noun = kind === "feature" ? "feature" : "suggestion";
+  const noun = NOUN[kind];
 
   async function handleSubmit() {
     if (!title.trim()) return;

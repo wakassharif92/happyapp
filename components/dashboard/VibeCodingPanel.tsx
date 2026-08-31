@@ -4,23 +4,23 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Issue, TabKey } from "@/lib/board/types";
 import { TAB_LABELS, TAB_ORDER } from "@/lib/board/types";
-import type { FeatureRequest } from "@/lib/types/database";
+import type { FeatureRequest, FeatureRequestKind } from "@/lib/types/database";
+import { FEATURE_REQUEST_KIND_LABELS } from "@/lib/types/database";
 import { IconClose } from "./icons";
 
-type SourceType = "issue" | "feature" | "suggestion" | "all";
+type SourceType = "issue" | FeatureRequestKind | "all";
 type StatusFilter = TabKey | "all";
 
-const KIND_LABEL: Record<"issue" | "feature" | "suggestion", string> = {
+const KIND_LABEL: Record<"issue" | FeatureRequestKind, string> = {
   issue: "Issue",
-  feature: "Feature",
-  suggestion: "Suggestion",
+  ...FEATURE_REQUEST_KIND_LABELS,
 };
 
 type PickerItem = {
   id: string;
   title: string;
   text: string;
-  kind: "issue" | "feature" | "suggestion";
+  kind: "issue" | FeatureRequestKind;
   // Only ever set for issues (features/suggestions carry no attachment) —
   // the same signed URL already resolved by app/dashboard/page.tsx /
   // DashboardClient.tsx's Realtime handler, not re-resolved here.
@@ -147,7 +147,12 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
   // the next depending on what else was checked alongside it.
   const itemNumbers = useMemo(() => {
     const map = new Map<string, number>();
-    const counters: Record<PickerItem["kind"], number> = { issue: 0, feature: 0, suggestion: 0 };
+    const counters: Record<PickerItem["kind"], number> = {
+      issue: 0,
+      feature: 0,
+      suggestion: 0,
+      later_on: 0,
+    };
     for (const item of allItems) {
       counters[item.kind] += 1;
       map.set(item.id, counters[item.kind]);
@@ -391,6 +396,7 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
           <option value="issue">Issues</option>
           <option value="feature">Features</option>
           <option value="suggestion">Suggestions</option>
+          <option value="later_on">Later On</option>
         </select>
 
         {(sourceType === "issue" || sourceType === "all") && (

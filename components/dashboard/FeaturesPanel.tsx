@@ -13,7 +13,13 @@ const STATUS_LABELS: Record<FeatureRequestStatus, string> = {
 
 const STATUS_ORDER: FeatureRequestStatus[] = ["pending", "in_progress", "done"];
 
-// Shared by both the Features and Suggestions tabs (DashboardClient.tsx
+const NOUN: Record<FeatureRequestKind, string> = {
+  feature: "feature idea",
+  suggestion: "suggestion",
+  later_on: "later on item",
+};
+
+// Shared by the Features, Suggestions, and Later On tabs (DashboardClient.tsx
 // passes `kind`) — self-contained (fetch + Realtime + add form), matching
 // the pattern SupportNavLink.tsx established for self-contained
 // company/project-scoped widgets.
@@ -90,7 +96,7 @@ export function FeaturesPanel({ projectId, kind }: { projectId: string; kind: Fe
     await updateFeatureRequestStatus(id, status);
   }
 
-  const noun = kind === "feature" ? "feature idea" : "suggestion";
+  const noun = NOUN[kind];
 
   return (
     <div className="flex flex-col gap-4">
