@@ -14,6 +14,11 @@ type PickerItem = {
   title: string;
   text: string;
   kind: "issue" | "feature" | "suggestion";
+  // Only ever set for issues (features/suggestions carry no attachment) —
+  // the same signed URL already resolved by app/dashboard/page.tsx /
+  // DashboardClient.tsx's Realtime handler, not re-resolved here.
+  mediaUrl?: string | null;
+  mediaType?: "image" | "video" | "none";
 };
 
 // "For Vibe Coding": check off one or more tracked items (issues at a
@@ -96,6 +101,8 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
       title: i.title,
       text: i.message,
       kind: "issue" as const,
+      mediaUrl: i.mediaUrl,
+      mediaType: i.mediaType,
     }));
     const requestItems: PickerItem[] = featureItems.map((f) => ({
       id: f.id,
@@ -164,6 +171,26 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
     });
   }
 
+  // Fetches the attached screenshot (already a signed, fetchable URL) and
+  // converts it to a data URL — jsPDF's addImage() needs the actual image
+  // bytes inline, not a remote src, the same reason ChatWindow.tsx's
+  // lightbox works with a plain <img> but a PDF can't just reference a URL.
+  async function fetchImageDataUrl(url: string): Promise<string | null> {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      return await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+    } catch {
+      return null;
+    }
+  }
+
   function buildCurlCommand(issueId: string): string | null {
     if (!apiToken) return null;
     const origin =
@@ -194,6 +221,10 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
           item,
           description: descriptionEdits.get(item.id) ?? (await fetchComposedText(item)),
           curl: item.kind === "issue" ? buildCurlCommand(item.id) : null,
+          imageDataUrl:
+            item.kind === "issue" && item.mediaType === "image" && item.mediaUrl
+              ? await fetchImageDataUrl(item.mediaUrl)
+              : null,
         }))
       );
 
@@ -234,6 +265,21 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
         y += 3;
       }
 
+      function addImage(dataUrl: string) {
+        const props = doc.getImageProperties(dataUrl);
+        const ratio = props.width / props.height;
+        let imgWidth = maxWidth;
+        let imgHeight = imgWidth / ratio;
+        const maxImgHeight = 100; // cap so a tall screenshot doesn't dominate the page
+        if (imgHeight > maxImgHeight) {
+          imgHeight = maxImgHeight;
+          imgWidth = imgHeight * ratio;
+        }
+        ensureSpace(1, imgHeight);
+        doc.addImage(dataUrl, props.fileType, margin, y, imgWidth, imgHeight);
+        y += imgHeight + 5;
+      }
+
       function addSeparator() {
         ensureSpace(1, 6);
         y += 3;
@@ -267,12 +313,17 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
         suggestion: "Suggestion",
       };
 
-      resolved.forEach(({ item, description, curl }, index) => {
+      resolved.forEach(({ item, description, curl, imageDataUrl }, index) => {
         counters[item.kind] += 1;
         if (index > 0) addSeparator();
         addHeading(`${kindLabel[item.kind]} ${counters[item.kind]}: ${item.title}`, 14);
         addHeading("Details", 10.5);
         addBody(description);
+        if (imageDataUrl) {
+          y += 1;
+          addHeading("Attached screenshot", 10.5);
+          addImage(imageDataUrl);
+        }
         if (curl) {
           y += 2;
           addHeading("Report back (run this once the fix is made)", 10.5);
