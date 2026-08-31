@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { extractProjectId } from "@/lib/board/projectSlug";
 import { SupportChatClient } from "./SupportChatClient";
 
 // Section 14: the "Customer Support" per-project link — opened from
@@ -14,7 +15,11 @@ export default async function SupportChatPage({
   params: Promise<{ projectId: string }>;
   searchParams: Promise<{ email?: string }>;
 }) {
-  const { projectId } = await params;
+  // Route segment may carry a decorative "<slug>-<id>" prefix (see
+  // projectSlugPath in LinksCard.tsx's link generation) — only the
+  // trailing UUID is ever actually looked up.
+  const { projectId: routeParam } = await params;
+  const projectId = extractProjectId(routeParam);
   const { email } = await searchParams;
 
   const supabase = createAdminClient();

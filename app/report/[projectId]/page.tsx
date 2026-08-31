@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { extractProjectId } from "@/lib/board/projectSlug";
 import { ReportForm } from "./ReportForm";
 import { submitTeamReport } from "./actions";
 
@@ -14,7 +15,11 @@ export default async function TeamReportLinkPage({
 }: {
   params: Promise<{ projectId: string }>;
 }) {
-  const { projectId } = await params;
+  // The route segment may be a bare id or "<slug>-<id>" (LinksCard.tsx
+  // now generates the latter so a shared link is human-readable) — the
+  // slug is decorative only, never used for the actual lookup below.
+  const { projectId: routeParam } = await params;
+  const projectId = extractProjectId(routeParam);
 
   // Admin client: no user session on a public page — same pattern as
   // app/team-report/page.tsx.

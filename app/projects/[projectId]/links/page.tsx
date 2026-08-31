@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { projectSlugPath } from "@/lib/board/projectSlug";
 import { LinksCard } from "./LinksCard";
 
 // Section 14: dedicated home for the two shareable per-project links —
@@ -49,8 +50,8 @@ export default async function LinksPage({
       </div>
 
       <LinksCard
-        supportLinkBase={`${origin}/support/${projectId}`}
-        reportLink={`${origin}/report/${projectId}`}
+        supportLinkBase={`${origin}/support/${projectSlugPath(projectId, project.name)}`}
+        reportLink={`${origin}/report/${projectSlugPath(projectId, project.name)}`}
       />
     </div>
   );
