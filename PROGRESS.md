@@ -2,7 +2,7 @@
 
 Tracks status against `qa-agent-spec.md`. Update this as work continues — check items off, move things between sections, add new gaps as they're found.
 
-**Last updated:** 2026-08-28
+**Last updated:** 2026-08-31
 
 ---
 
@@ -314,6 +314,20 @@ Three related IssueCard/detail-panel changes from real usage feedback:
 - **Image lightbox in the detail panel**: the large `Thumbnail` at the top of `IssueDetailPanel.tsx` is now tappable when there's a real image, opening the same full-screen lightbox pattern already proven in `ChatWindow.tsx` (Escape key, backdrop click, close button) — previously it was a static, non-interactive image.
 
 `tsc`/`eslint`/`next build` all clean. **Migration 0019 has not been applied yet.**
+
+### 31. Vibe Coding / AI Fix polish round (bug fixes + numbering, no new migration)
+A batch of smaller fixes and refinements caught through real usage, none requiring schema changes:
+
+- **Fixed: broken images on live-Realtime-inserted issues.** `media_url` is a private Storage path only resolved to a signed URL by `app/dashboard/page.tsx`'s initial server load — `DashboardClient.tsx`'s Realtime `INSERT` handler was passing the raw path straight through instead, rendering a broken image on any issue that arrived live (Slack/WhatsApp/Team Report) rather than via a fresh page load. Now resolves the signed URL inside the Realtime handler too.
+- **Fixed: checking multiple items in Vibe Coding only produced one issue in the generated PDF.** The type/status filter dropdowns were calling `setSelectedIds(new Set())` on every change, silently dropping earlier picks. Removed those resets; selections now persist across filter changes using the `allItems`/`items` split already described in §28.
+- **Fixed: attached screenshots were missing from the generated PDF** even though they showed on the issue card — jsPDF needs actual image bytes (`getImageProperties`/`addImage` on a data URL), not a remote `src`. `VibeCodingPanel.tsx` now fetches each selected issue's signed image URL, converts it to a data URL (`fetch` → `blob` → `FileReader`), and embeds it under an "Attached screenshot" heading.
+- **PDF layout**: multiple selected items no longer force a page break between them — they flow one after another separated by a horizontal rule, only breaking pages where content naturally runs out of room.
+- **Vibe Coding picker now shows the attached screenshot inline** (when expanded) and is tappable to open the same full-screen lightbox pattern used elsewhere in the app, instead of only being visible after generating a PDF.
+- **Stable "Issue 1 / Feature 1 / Suggestion 1…" numbering**, requested to match between the Vibe Coding PDF/picker and the AI Fix tab. Previously the PDF numbered only the currently-*checked* subset in selection order, so the same issue's number could change depending on what else was checked alongside it. Now `VibeCodingPanel.tsx` computes a stable `itemNumbers` map from each item's position in the full, unfiltered list (per kind), and both the picker rows and the PDF headings read from that map. `IssueCard.tsx` takes a `displayNumber` prop (`DashboardClient.tsx` passes each AI Fix card's 1-based position in the visible list) and renders "Issue N:" ahead of the title, but only on the AI Fix tab.
+- **Issues already in AI Fix no longer appear in the Vibe Coding picker** — once an issue has been sent off and fixed (or claimed fixed), re-picking it in Vibe Coding made no sense until a human sends it back to Pending/In Progress from the AI Fix tab; it's now filtered out of `allItems` entirely (and "AI Fix" removed from the status-filter dropdown, since it would always show nothing).
+- **PDF's "Instructions for AI" now requires the report-back callback to be run for every item, even when the AI couldn't find or reproduce the issue** — previously an AI tool that hit a dead end could just skip the callback silently, leaving no record. The summary text is where it explains what it found (or didn't).
+
+`tsc`/`eslint`/`next build` all clean.
 
 ---
 
