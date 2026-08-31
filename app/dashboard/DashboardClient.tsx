@@ -462,6 +462,7 @@ export function DashboardClient({
                       hasUnreadDevReply={unreadDevReplyIds.has(issue.id)}
                       canMoveUp={index > 0}
                       canMoveDown={index < visibleIssues.length - 1}
+                      displayNumber={index + 1}
                       onOpenDetail={setSelectedIssueId}
                       onCategoryChange={handleCategoryChange}
                       onMove={handleMove}

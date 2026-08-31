@@ -10,6 +10,12 @@ import { IconClose } from "./icons";
 type SourceType = "issue" | "feature" | "suggestion" | "all";
 type StatusFilter = TabKey | "all";
 
+const KIND_LABEL: Record<"issue" | "feature" | "suggestion", string> = {
+  issue: "Issue",
+  feature: "Feature",
+  suggestion: "Suggestion",
+};
+
 type PickerItem = {
   id: string;
   title: string;
@@ -107,14 +113,21 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
   // (see the bug this fixes: the type/status dropdowns used to reset
   // selectedIds on change, silently dropping earlier picks).
   const allItems = useMemo<PickerItem[]>(() => {
-    const issueItems: PickerItem[] = issues.map((i) => ({
-      id: i.id,
-      title: i.title,
-      text: i.message,
-      kind: "issue" as const,
-      mediaUrl: i.mediaUrl,
-      mediaType: i.mediaType,
-    }));
+    // Once an issue is in AI Fix it's already been sent off and fixed (or
+    // claimed fixed) once — it has no business being picked again here
+    // until a human sends it back to Pending/In Progress from the AI Fix
+    // tab, so it's excluded outright rather than just another status
+    // filter option.
+    const issueItems: PickerItem[] = issues
+      .filter((i) => i.tab !== "ai_fix")
+      .map((i) => ({
+        id: i.id,
+        title: i.title,
+        text: i.message,
+        kind: "issue" as const,
+        mediaUrl: i.mediaUrl,
+        mediaType: i.mediaType,
+      }));
     const requestItems: PickerItem[] = featureItems.map((f) => ({
       id: f.id,
       title: f.title,
@@ -123,6 +136,24 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
     }));
     return [...issueItems, ...requestItems];
   }, [issues, featureItems]);
+
+  // Stable, per-kind numbering (Issue 1, Issue 2, Feature 1, …) based on
+  // each item's position in the full unfiltered list — NOT which ones are
+  // currently checked, so "Issue 3" always means the same issue whether
+  // you're looking at the picker, the generated PDF, or (matching
+  // numbers, not the same physical issue) the AI Fix tab (IssueCard.tsx).
+  // Previously the PDF numbered only the selected subset in selection
+  // order, so the same issue could be "Issue 1" one export and "Issue 2"
+  // the next depending on what else was checked alongside it.
+  const itemNumbers = useMemo(() => {
+    const map = new Map<string, number>();
+    const counters: Record<PickerItem["kind"], number> = { issue: 0, feature: 0, suggestion: 0 };
+    for (const item of allItems) {
+      counters[item.kind] += 1;
+      map.set(item.id, counters[item.kind]);
+    }
+    return map;
+  }, [allItems]);
 
   // The filtered subset actually shown in the picker list below.
   const items = useMemo<PickerItem[]>(() => {
@@ -315,19 +346,19 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
           "implementing or executing anything until the user has explicitly confirmed " +
           "your understanding is correct."
       );
+      addBody(
+        "Every item below must end with its \"Report back\" command being run — this is " +
+          "required even if you could not find the issue in the codebase, could not " +
+          "reproduce it, or determined it was already fixed. Updating the status is " +
+          "mandatory in every case; what changes is only the summary text you send: " +
+          "explain clearly what you found (or didn't find) so a human can review it in " +
+          "AI Fix and decide what to do next."
+      );
       y += 3;
 
-      const counters: Record<PickerItem["kind"], number> = { issue: 0, feature: 0, suggestion: 0 };
-      const kindLabel: Record<PickerItem["kind"], string> = {
-        issue: "Issue",
-        feature: "Feature",
-        suggestion: "Suggestion",
-      };
-
       resolved.forEach(({ item, description, curl, imageDataUrl }, index) => {
-        counters[item.kind] += 1;
         if (index > 0) addSeparator();
-        addHeading(`${kindLabel[item.kind]} ${counters[item.kind]}: ${item.title}`, 14);
+        addHeading(`${KIND_LABEL[item.kind]} ${itemNumbers.get(item.id)}: ${item.title}`, 14);
         addHeading("Details", 10.5);
         addBody(description);
         if (imageDataUrl) {
@@ -369,7 +400,7 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
             className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-700"
           >
             <option value="all">All statuses</option>
-            {TAB_ORDER.map((tab) => (
+            {TAB_ORDER.filter((tab) => tab !== "ai_fix").map((tab) => (
               <option key={tab} value={tab}>
                 {TAB_LABELS[tab]}
               </option>
@@ -408,6 +439,9 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
                     onClick={() => toggleExpand(item)}
                     className="min-w-0 flex-1 truncate text-left text-sm font-medium text-slate-900"
                   >
+                    <span className="text-slate-400">
+                      {KIND_LABEL[item.kind]} {itemNumbers.get(item.id)}:
+                    </span>{" "}
                     {item.title}
                   </button>
                   {item.kind !== "issue" && (

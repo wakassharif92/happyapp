@@ -16,6 +16,7 @@ export function IssueCard({
   hasUnreadDevReply = false,
   canMoveUp = true,
   canMoveDown = true,
+  displayNumber,
   onOpenDetail,
   onCategoryChange,
   onMove,
@@ -28,6 +29,13 @@ export function IssueCard({
   hasUnreadDevReply?: boolean;
   canMoveUp?: boolean;
   canMoveDown?: boolean;
+  // Position within the currently visible list (1-based) — only rendered
+  // on the AI Fix tab (matching the "Issue 1, Issue 2…" numbering already
+  // used in the Vibe Coding PDF/picker, see VibeCodingPanel.tsx), so a
+  // dev can cross-reference which issue a generated PDF export refers to
+  // while verifying fixes here. Not shown on other tabs — nothing else
+  // needs it.
+  displayNumber?: number;
   onOpenDetail: (id: string) => void;
   onCategoryChange: (id: string, category: Category) => void;
   onMove: (id: string, tab: TabKey) => void;
@@ -99,7 +107,12 @@ export function IssueCard({
         </div>
 
         <button type="button" onClick={() => onOpenDetail(issue.id)} className="text-left">
-          <p className="truncate text-sm font-semibold text-[var(--db-fg)]">{issue.title}</p>
+          <p className="truncate text-sm font-semibold text-[var(--db-fg)]">
+            {isAiFix && displayNumber != null && (
+              <span className="text-[var(--db-fg-subtle)]">Issue {displayNumber}: </span>
+            )}
+            {issue.title}
+          </p>
           <p className="line-clamp-2 text-sm text-[var(--db-fg-muted)]">{issue.message}</p>
         </button>
 
