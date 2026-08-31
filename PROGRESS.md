@@ -342,6 +342,15 @@ The three places that used to hardcode `kind === "feature" ? "Feature" : "Sugges
 
 `tsc`/`eslint`/`next build` all clean. **Migration 0020 has not been applied yet.**
 
+### 33. Project name embedded in shareable Report/Support links (no migration)
+The "Internal Team" and "Customer Support" links (§14, `LinksCard.tsx`) were bare UUIDs (`/report/<uuid>`, `/support/<uuid>`) — with several projects each generating their own link, there was no way to tell which project a copied link belonged to just by looking at the URL. Caught directly by the user pointing at a real link and asking for the project name to be visible in it.
+
+**`lib/board/projectSlug.ts`** (new) — `projectSlugPath(id, name)` builds a vanity route segment (`"<slugified-name>-<uuid>"`, e.g. `acme-app-6b351396-…`), `extractProjectId(routeParam)` pulls the real UUID back out via a trailing-UUID regex, ignoring whatever slug is in front. `LinksCard.tsx`'s two links (via `app/projects/[projectId]/links/page.tsx`) now generate the slugged form; `app/report/[projectId]/page.tsx` and `app/support/[projectId]/page.tsx` both call `extractProjectId()` on the route param before doing anything else with it, so every downstream lookup, bound server action, and client-component prop gets the clean UUID exactly as before — nothing past that first line changed.
+
+**Old bare-UUID links (already shared, before this existed) keep working unchanged** — a bare UUID is itself a valid match for the trailing-UUID regex, so `extractProjectId` returns it as-is. Verified both forms resolve identically against the same real project in production.
+
+`tsc`/`eslint`/`next build` all clean. No migration — display/routing only.
+
 ---
 
 ## Pending / not built
