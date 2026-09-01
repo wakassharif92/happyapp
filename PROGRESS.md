@@ -372,6 +372,10 @@ New third popover option, **`buildPdfText()`** — mirrors `buildPdfDocument()`'
 
 `tsc`/`eslint`/`next build` all clean.
 
+**§35 and §36 were both reverted immediately after** (same day) — what the user actually meant, once they clarified directly, was neither a link nor a text copy: they wanted the literal PDF *file* copied onto the OS clipboard the way `Ctrl+C` on a file in Finder/Explorer works, so any paste target attaches it as a real file with zero download step. That's not something a website can reliably do — there's no web API for a true OS-level file-clipboard write, and even the closest approximation (writing a `Blob` via the Clipboard API) only works in Chromium browsers and only if the paste target's own handler happens to accept a blob the same way it'd accept an OS file drop, which can't be promised for an arbitrary external AI tool. Asked the user whether to attempt that Chrome-only best-effort version anyway, or drop it — they chose to drop it and revert to the plain single-button "Generate PDF" (download only) that existed before §35, keeping every other change from that session (numbering, AI-Fix exclusion, the Later On kind, the Note for AI field). `VibeCodingPanel.tsx` is back to that exact pre-§35 shape.
+
+**If "paste the actual file" ever comes up again**: the honest options are (a) the Chrome-only best-effort blob-clipboard write described above, with no guarantee the target app accepts it, or (b) accept that a download-then-manually-attach step is unavoidable for a real file, and instead make the *download* step as low-friction as possible (e.g. one click, sensible filename). Worth raising this trade-off explicitly before building either.
+
 ---
 
 ## Pending / not built
@@ -380,8 +384,7 @@ New third popover option, **`buildPdfText()`** — mirrors `buildPdfDocument()`'
 - **No way to regenerate a project's `api_token`** if it ever needs invalidating (§29) — would need a small admin-only action + button, likely on the Settings or Documents page.
 - The CoachPro-inspired visual redesign (Part E) hasn't been started.
 - **Full browser-level verification of the invite-claim flow is still open** — confirmed the underlying RLS/DB mechanics directly (see §27), but nobody has clicked through the actual `/invite/[token]` → Google consent → landing-in-the-right-company path in a real browser yet, since that requires a second real Google account. Worth doing once there's an actual second team member to invite for real.
-- **"Copy PDF Link" (§35) hasn't been clicked through in a real browser yet** — verify the uploaded PDF actually lands in `whatsapp-media`, the signed URL opens it correctly, and the "Link copied!"/error feedback shows as expected.
-- **The stale `https://qa-agent.internal/...` fake link in `handleCopyLink`/"Copy Public PDF Link"** (`DashboardClient.tsx`, per-issue "Copy Public PDF Link" button on `IssueCard`/`IssueDetailPanel`) — found while building §35, was never wired to a real route, dates from the pre-§19 mock-data prototype. Worth fixing the same way (or removing) if that per-issue link is ever actually used.
+- **The stale `https://qa-agent.internal/...` fake link in `handleCopyLink`/"Copy Public PDF Link"** (`DashboardClient.tsx`, per-issue "Copy Public PDF Link" button on `IssueCard`/`IssueDetailPanel`) — found while building §35 (since reverted, see §36's note), was never wired to a real route, dates from the pre-§19 mock-data prototype. Worth fixing the same way (or removing) if that per-issue link is ever actually used.
 
 - **§25's ticketing feature has not been run against a real database yet** — migration `0013_support_tickets.sql` needs to be applied (Supabase SQL editor, same as every other migration this session), then walked through end-to-end for real before trusting it. See §25 above for the exact loop to test.
 
