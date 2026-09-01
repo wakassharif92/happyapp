@@ -414,6 +414,83 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
     }
   }
 
+  // Same content as buildPdfDocument(), as one plain-text block instead
+  // of a PDF — pasting a *link* into a chat input just pastes the URL
+  // string itself (nothing on the other end fetches it automatically),
+  // so for "paste this straight into an AI tool" this is what actually
+  // works: the real text lands in the input the moment you paste, no
+  // separate fetch/open step. Screenshots have no text form, so this
+  // skips the image fetch entirely — "Copy PDF Link" below is still the
+  // way to hand over an item that needs its screenshot seen.
+  async function buildPdfText(): Promise<string | null> {
+    const selected = allItems.filter((i) => selectedIds.has(i.id));
+    if (selected.length === 0) return null;
+
+    const resolved = await Promise.all(
+      selected.map(async (item) => ({
+        item,
+        description: descriptionEdits.get(item.id) ?? (await fetchComposedText(item)),
+        curl: item.kind === "issue" ? buildCurlCommand(item.id) : null,
+      }))
+    );
+
+    const lines: string[] = [];
+    lines.push("HappyApp — Vibe Coding Export");
+    lines.push(new Date().toLocaleString());
+    lines.push("");
+    lines.push(
+      "Before making any changes, read through every item below and confirm your " +
+        "understanding of the requirements back to the user first. Do not begin " +
+        "implementing or executing anything until the user has explicitly confirmed " +
+        "your understanding is correct."
+    );
+    lines.push(
+      "Every item below must end with its \"Report back\" command being run — this is " +
+        "required even if you could not find the issue in the codebase, could not " +
+        "reproduce it, or determined it was already fixed. Updating the status is " +
+        "mandatory in every case; what changes is only the summary text you send: " +
+        "explain clearly what you found (or didn't find) so a human can review it in " +
+        "AI Fix and decide what to do next."
+    );
+
+    if (noteForAi.trim()) {
+      lines.push("");
+      lines.push("Note from the team:");
+      lines.push(noteForAi.trim());
+    }
+
+    resolved.forEach(({ item, description, curl }) => {
+      lines.push("");
+      lines.push("----------------------------------------");
+      lines.push(`${KIND_LABEL[item.kind]} ${itemNumbers.get(item.id)}: ${item.title}`);
+      lines.push("");
+      lines.push(description);
+      if (curl) {
+        lines.push("");
+        lines.push("Report back (run this once the fix is made):");
+        lines.push(curl);
+      }
+    });
+
+    return lines.join("\n");
+  }
+
+  async function handleCopyPdfText() {
+    setGenerating(true);
+    setPdfStatus(null);
+    try {
+      const text = await buildPdfText();
+      if (!text) return;
+      await navigator.clipboard.writeText(text);
+      setPdfStatus({ type: "success", text: "Copied!" });
+    } catch {
+      setPdfStatus({ type: "error", text: "Failed to copy" });
+    } finally {
+      setGenerating(false);
+      setTimeout(() => setPdfStatus(null), 3000);
+    }
+  }
+
   // Uploads the same generated PDF to the existing private "whatsapp-media"
   // Storage bucket (already used for report/support screenshots — its
   // is_staff() insert/select policies, migration 0009, cover any signed-in
@@ -511,6 +588,16 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
                     className="block w-full px-3 py-2 text-left text-sm text-slate-700 transition-colors hover:bg-slate-50"
                   >
                     Download as PDF
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPdfMenuOpen(false);
+                      handleCopyPdfText();
+                    }}
+                    className="block w-full px-3 py-2 text-left text-sm text-slate-700 transition-colors hover:bg-slate-50"
+                  >
+                    Copy as Text
                   </button>
                   <button
                     type="button"
