@@ -6,7 +6,7 @@ import type { Issue, TabKey } from "@/lib/board/types";
 import { TAB_LABELS, TAB_ORDER } from "@/lib/board/types";
 import type { FeatureRequest, FeatureRequestKind } from "@/lib/types/database";
 import { FEATURE_REQUEST_KIND_LABELS } from "@/lib/types/database";
-import { IconClose } from "./icons";
+import { IconChevronDown, IconClose } from "./icons";
 
 type SourceType = "issue" | FeatureRequestKind | "all";
 type StatusFilter = TabKey | "all";
@@ -59,6 +59,14 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
   // every item's own section.
   const [noteForAi, setNoteForAi] = useState("");
   const [generating, setGenerating] = useState(false);
+  const [pdfMenuOpen, setPdfMenuOpen] = useState(false);
+  // Transient feedback next to the Generate PDF button — the popover
+  // itself closes as soon as an option is picked (the upload/signing for
+  // "Copy PDF Link" takes a moment), so "Link copied!"/an error can't be
+  // shown inside the menu the way CopyRow.tsx shows it inline.
+  const [pdfStatus, setPdfStatus] = useState<{ type: "success" | "error"; text: string } | null>(
+    null
+  );
   const [apiToken, setApiToken] = useState<string | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
@@ -253,7 +261,7 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
   -d '{"summary": "Describe what you changed here"}'`;
   }
 
-  // Dynamic import — jsPDF only runs inside this click handler, never at
+  // Dynamic import — jsPDF only runs inside this function, never at
   // module load time, so there's no risk of it touching browser globals
   // during SSR just because this component happens to be mounted.
   //
@@ -263,135 +271,179 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
   // Items flow one after another on the same page, separated by a
   // horizontal rule — pages only break where content naturally runs out
   // of room (ensureSpace), not once per item.
-  async function handleGeneratePdf() {
+  //
+  // Shared by both "Download as PDF" and "Copy PDF Link" — the document
+  // itself is identical either way, only what happens to the finished
+  // jsPDF instance differs (doc.save() vs. doc.output("blob") + upload).
+  async function buildPdfDocument() {
     const selected = allItems.filter((i) => selectedIds.has(i.id));
-    if (selected.length === 0) return;
+    if (selected.length === 0) return null;
+
+    const resolved = await Promise.all(
+      selected.map(async (item) => ({
+        item,
+        description: descriptionEdits.get(item.id) ?? (await fetchComposedText(item)),
+        curl: item.kind === "issue" ? buildCurlCommand(item.id) : null,
+        imageDataUrl:
+          item.kind === "issue" && item.mediaType === "image" && item.mediaUrl
+            ? await fetchImageDataUrl(item.mediaUrl)
+            : null,
+      }))
+    );
+
+    const { jsPDF } = await import("jspdf");
+    const doc = new jsPDF();
+    const margin = 15;
+    const maxWidth = doc.internal.pageSize.getWidth() - margin * 2;
+    const pageHeight = doc.internal.pageSize.getHeight();
+    let y = margin;
+
+    function ensureSpace(lines: number, lineHeight: number) {
+      if (y + lines * lineHeight > pageHeight - margin) {
+        doc.addPage();
+        y = margin;
+      }
+    }
+
+    function addHeading(text: string, size: number) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(size);
+      const lines = doc.splitTextToSize(text, maxWidth);
+      ensureSpace(lines.length, size * 0.5);
+      doc.text(lines, margin, y);
+      y += lines.length * (size * 0.5) + 3;
+    }
+
+    function addBody(text: string, opts: { font?: "helvetica" | "courier"; size?: number } = {}) {
+      const font = opts.font ?? "helvetica";
+      const size = opts.size ?? 10.5;
+      doc.setFont(font, "normal");
+      doc.setFontSize(size);
+      const lines = doc.splitTextToSize(text, maxWidth);
+      for (const line of lines) {
+        ensureSpace(1, size * 0.5);
+        doc.text(line, margin, y);
+        y += size * 0.5;
+      }
+      y += 3;
+    }
+
+    function addImage(dataUrl: string) {
+      const props = doc.getImageProperties(dataUrl);
+      const ratio = props.width / props.height;
+      let imgWidth = maxWidth;
+      let imgHeight = imgWidth / ratio;
+      const maxImgHeight = 100; // cap so a tall screenshot doesn't dominate the page
+      if (imgHeight > maxImgHeight) {
+        imgHeight = maxImgHeight;
+        imgWidth = imgHeight * ratio;
+      }
+      ensureSpace(1, imgHeight);
+      doc.addImage(dataUrl, props.fileType, margin, y, imgWidth, imgHeight);
+      y += imgHeight + 5;
+    }
+
+    function addSeparator() {
+      ensureSpace(1, 6);
+      y += 3;
+      doc.setDrawColor(200);
+      doc.line(margin, y, margin + maxWidth, y);
+      doc.setDrawColor(0);
+      y += 7;
+    }
+
+    addHeading("HappyApp — Vibe Coding Export", 16);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(130);
+    doc.text(new Date().toLocaleString(), margin, y);
+    doc.setTextColor(0);
+    y += 9;
+
+    addHeading("Instructions for AI", 12);
+    addBody(
+      "Before making any changes, read through every item below and confirm your " +
+        "understanding of the requirements back to the user first. Do not begin " +
+        "implementing or executing anything until the user has explicitly confirmed " +
+        "your understanding is correct."
+    );
+    addBody(
+      "Every item below must end with its \"Report back\" command being run — this is " +
+        "required even if you could not find the issue in the codebase, could not " +
+        "reproduce it, or determined it was already fixed. Updating the status is " +
+        "mandatory in every case; what changes is only the summary text you send: " +
+        "explain clearly what you found (or didn't find) so a human can review it in " +
+        "AI Fix and decide what to do next."
+    );
+    y += 3;
+
+    if (noteForAi.trim()) {
+      addHeading("Note from the team", 12);
+      addBody(noteForAi.trim());
+      y += 3;
+    }
+
+    resolved.forEach(({ item, description, curl, imageDataUrl }, index) => {
+      if (index > 0) addSeparator();
+      addHeading(`${KIND_LABEL[item.kind]} ${itemNumbers.get(item.id)}: ${item.title}`, 14);
+      addHeading("Details", 10.5);
+      addBody(description);
+      if (imageDataUrl) {
+        y += 1;
+        addHeading("Attached screenshot", 10.5);
+        addImage(imageDataUrl);
+      }
+      if (curl) {
+        y += 2;
+        addHeading("Report back (run this once the fix is made)", 10.5);
+        addBody(curl, { font: "courier", size: 9 });
+      }
+    });
+
+    return doc;
+  }
+
+  async function handleDownloadPdf() {
     setGenerating(true);
     try {
-      const resolved = await Promise.all(
-        selected.map(async (item) => ({
-          item,
-          description: descriptionEdits.get(item.id) ?? (await fetchComposedText(item)),
-          curl: item.kind === "issue" ? buildCurlCommand(item.id) : null,
-          imageDataUrl:
-            item.kind === "issue" && item.mediaType === "image" && item.mediaUrl
-              ? await fetchImageDataUrl(item.mediaUrl)
-              : null,
-        }))
-      );
-
-      const { jsPDF } = await import("jspdf");
-      const doc = new jsPDF();
-      const margin = 15;
-      const maxWidth = doc.internal.pageSize.getWidth() - margin * 2;
-      const pageHeight = doc.internal.pageSize.getHeight();
-      let y = margin;
-
-      function ensureSpace(lines: number, lineHeight: number) {
-        if (y + lines * lineHeight > pageHeight - margin) {
-          doc.addPage();
-          y = margin;
-        }
-      }
-
-      function addHeading(text: string, size: number) {
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(size);
-        const lines = doc.splitTextToSize(text, maxWidth);
-        ensureSpace(lines.length, size * 0.5);
-        doc.text(lines, margin, y);
-        y += lines.length * (size * 0.5) + 3;
-      }
-
-      function addBody(text: string, opts: { font?: "helvetica" | "courier"; size?: number } = {}) {
-        const font = opts.font ?? "helvetica";
-        const size = opts.size ?? 10.5;
-        doc.setFont(font, "normal");
-        doc.setFontSize(size);
-        const lines = doc.splitTextToSize(text, maxWidth);
-        for (const line of lines) {
-          ensureSpace(1, size * 0.5);
-          doc.text(line, margin, y);
-          y += size * 0.5;
-        }
-        y += 3;
-      }
-
-      function addImage(dataUrl: string) {
-        const props = doc.getImageProperties(dataUrl);
-        const ratio = props.width / props.height;
-        let imgWidth = maxWidth;
-        let imgHeight = imgWidth / ratio;
-        const maxImgHeight = 100; // cap so a tall screenshot doesn't dominate the page
-        if (imgHeight > maxImgHeight) {
-          imgHeight = maxImgHeight;
-          imgWidth = imgHeight * ratio;
-        }
-        ensureSpace(1, imgHeight);
-        doc.addImage(dataUrl, props.fileType, margin, y, imgWidth, imgHeight);
-        y += imgHeight + 5;
-      }
-
-      function addSeparator() {
-        ensureSpace(1, 6);
-        y += 3;
-        doc.setDrawColor(200);
-        doc.line(margin, y, margin + maxWidth, y);
-        doc.setDrawColor(0);
-        y += 7;
-      }
-
-      addHeading("HappyApp — Vibe Coding Export", 16);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.setTextColor(130);
-      doc.text(new Date().toLocaleString(), margin, y);
-      doc.setTextColor(0);
-      y += 9;
-
-      addHeading("Instructions for AI", 12);
-      addBody(
-        "Before making any changes, read through every item below and confirm your " +
-          "understanding of the requirements back to the user first. Do not begin " +
-          "implementing or executing anything until the user has explicitly confirmed " +
-          "your understanding is correct."
-      );
-      addBody(
-        "Every item below must end with its \"Report back\" command being run — this is " +
-          "required even if you could not find the issue in the codebase, could not " +
-          "reproduce it, or determined it was already fixed. Updating the status is " +
-          "mandatory in every case; what changes is only the summary text you send: " +
-          "explain clearly what you found (or didn't find) so a human can review it in " +
-          "AI Fix and decide what to do next."
-      );
-      y += 3;
-
-      if (noteForAi.trim()) {
-        addHeading("Note from the team", 12);
-        addBody(noteForAi.trim());
-        y += 3;
-      }
-
-      resolved.forEach(({ item, description, curl, imageDataUrl }, index) => {
-        if (index > 0) addSeparator();
-        addHeading(`${KIND_LABEL[item.kind]} ${itemNumbers.get(item.id)}: ${item.title}`, 14);
-        addHeading("Details", 10.5);
-        addBody(description);
-        if (imageDataUrl) {
-          y += 1;
-          addHeading("Attached screenshot", 10.5);
-          addImage(imageDataUrl);
-        }
-        if (curl) {
-          y += 2;
-          addHeading("Report back (run this once the fix is made)", 10.5);
-          addBody(curl, { font: "courier", size: 9 });
-        }
-      });
-
+      const doc = await buildPdfDocument();
+      if (!doc) return;
       doc.save(`vibe-coding-export-${Date.now()}.pdf`);
     } finally {
       setGenerating(false);
+    }
+  }
+
+  // Uploads the same generated PDF to the existing private "whatsapp-media"
+  // Storage bucket (already used for report/support screenshots — its
+  // is_staff() insert/select policies, migration 0009, cover any signed-in
+  // company member) under a random filename, then copies a signed URL —
+  // long-lived (7 days) since the whole point is pasting it somewhere
+  // (an AI chat tool) to be fetched later, not downloaded immediately.
+  async function handleCopyPdfLink() {
+    setGenerating(true);
+    setPdfStatus(null);
+    try {
+      const doc = await buildPdfDocument();
+      if (!doc) return;
+      const blob = doc.output("blob");
+      const path = `vibe-coding-${crypto.randomUUID()}.pdf`;
+      const supabase = createClient();
+      const { error: uploadError } = await supabase.storage
+        .from("whatsapp-media")
+        .upload(path, blob, { contentType: "application/pdf" });
+      if (uploadError) throw uploadError;
+      const { data, error: signError } = await supabase.storage
+        .from("whatsapp-media")
+        .createSignedUrl(path, 60 * 60 * 24 * 7);
+      if (signError || !data?.signedUrl) throw signError ?? new Error("Failed to create link");
+      await navigator.clipboard.writeText(data.signedUrl);
+      setPdfStatus({ type: "success", text: "Link copied!" });
+    } catch {
+      setPdfStatus({ type: "error", text: "Failed to copy link" });
+    } finally {
+      setGenerating(false);
+      setTimeout(() => setPdfStatus(null), 3000);
     }
   }
 
@@ -425,14 +477,56 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
           </select>
         )}
 
-        <button
-          type="button"
-          onClick={handleGeneratePdf}
-          disabled={generating || selectedIds.size === 0}
-          className="btn-primary ml-auto"
-        >
-          {generating ? "Generating…" : `Generate PDF${selectedIds.size > 0 ? ` (${selectedIds.size})` : ""}`}
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          {pdfStatus && (
+            <span
+              className={`text-xs ${pdfStatus.type === "success" ? "text-emerald-600" : "text-red-600"}`}
+            >
+              {pdfStatus.text}
+            </span>
+          )}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setPdfMenuOpen((o) => !o)}
+              disabled={generating || selectedIds.size === 0}
+              className="btn-primary inline-flex items-center gap-1.5"
+            >
+              {generating
+                ? "Generating…"
+                : `Generate PDF${selectedIds.size > 0 ? ` (${selectedIds.size})` : ""}`}
+              <IconChevronDown className="h-3.5 w-3.5" />
+            </button>
+
+            {pdfMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setPdfMenuOpen(false)} />
+                <div className="absolute right-0 top-full z-20 mt-1 min-w-[180px] overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPdfMenuOpen(false);
+                      handleDownloadPdf();
+                    }}
+                    className="block w-full px-3 py-2 text-left text-sm text-slate-700 transition-colors hover:bg-slate-50"
+                  >
+                    Download as PDF
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPdfMenuOpen(false);
+                      handleCopyPdfLink();
+                    }}
+                    className="block w-full px-3 py-2 text-left text-sm text-slate-700 transition-colors hover:bg-slate-50"
+                  >
+                    Copy PDF Link
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="card flex flex-col gap-1.5 p-4">
