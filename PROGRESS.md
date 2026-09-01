@@ -351,6 +351,11 @@ The "Internal Team" and "Customer Support" links (§14, `LinksCard.tsx`) were ba
 
 `tsc`/`eslint`/`next build` all clean. No migration — display/routing only.
 
+### 34. Whole-export "Note for AI" in Vibe Coding (no migration)
+A free-text field that applies to the entire batch, not one item — for things like setup steps or "ignore the styling on #2 for now" that don't belong on any single item's Dev Description. `VibeCodingPanel.tsx` gained a `noteForAi` state + textarea, rendered between the filter bar and the item list; `handleGeneratePdf` writes it into the PDF as its own "Note from the team" section, right after the AI instructions and before every item's own section, only when non-empty. Session-only state (same as every other text field in this panel), not persisted server-side.
+
+`tsc`/`eslint`/`next build` all clean. No migration — client-side only.
+
 ---
 
 ## Pending / not built
