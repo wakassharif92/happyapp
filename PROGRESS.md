@@ -356,6 +356,15 @@ A free-text field that applies to the entire batch, not one item — for things 
 
 `tsc`/`eslint`/`next build` all clean. No migration — client-side only.
 
+### 35. "Copy PDF Link" alongside "Download as PDF" in Vibe Coding (no migration)
+The Generate PDF button now opens a small popover with two options, rather than always downloading a file — the user wanted to be able to paste a link directly into an AI chat tool instead of downloading and re-uploading the PDF by hand.
+
+`VibeCodingPanel.tsx`'s PDF-building logic (previously all inline in one `handleGeneratePdf`) is now `buildPdfDocument()`, returning the finished `jsPDF` instance without saving it — shared by two thin wrappers: `handleDownloadPdf()` (the original `doc.save(...)` behavior) and `handleCopyPdfLink()`, which calls `doc.output("blob")`, uploads it to the existing private `whatsapp-media` Storage bucket under a random filename (`vibe-coding-<uuid>.pdf` — same bucket already used for report/support screenshots, covered by the same `is_staff()` insert/select policies from migration 0009, no new bucket or policy needed), creates a 7-day signed URL, and copies it to the clipboard. Transient "Link copied!"/"Failed to copy link" feedback shows next to the button rather than inside the popover, since the popover closes immediately on click but the upload+signing takes a moment.
+
+**Found and left alone, not fixed**: `DashboardClient.tsx`'s unrelated `handleCopyLink`/"Copy Public PDF Link" (the per-issue link on `IssueCard`/`IssueDetailPanel`, §14-era) builds a URL against `https://qa-agent.internal/...` — a fake placeholder domain with no real route behind it, dating from the pre-§19 mock-data prototype. It was never wired up and still isn't; worth fixing the same way if that per-issue link is ever actually needed, but out of scope for this request.
+
+`tsc`/`eslint`/`next build` all clean. **Not yet verified against a real signed-in session in a browser** — the upload/signing path reuses an already-proven bucket and policy, but nobody has actually clicked "Copy PDF Link" and confirmed the pasted link opens the real PDF yet.
+
 ---
 
 ## Pending / not built
@@ -364,6 +373,8 @@ A free-text field that applies to the entire batch, not one item — for things 
 - **No way to regenerate a project's `api_token`** if it ever needs invalidating (§29) — would need a small admin-only action + button, likely on the Settings or Documents page.
 - The CoachPro-inspired visual redesign (Part E) hasn't been started.
 - **Full browser-level verification of the invite-claim flow is still open** — confirmed the underlying RLS/DB mechanics directly (see §27), but nobody has clicked through the actual `/invite/[token]` → Google consent → landing-in-the-right-company path in a real browser yet, since that requires a second real Google account. Worth doing once there's an actual second team member to invite for real.
+- **"Copy PDF Link" (§35) hasn't been clicked through in a real browser yet** — verify the uploaded PDF actually lands in `whatsapp-media`, the signed URL opens it correctly, and the "Link copied!"/error feedback shows as expected.
+- **The stale `https://qa-agent.internal/...` fake link in `handleCopyLink`/"Copy Public PDF Link"** (`DashboardClient.tsx`, per-issue "Copy Public PDF Link" button on `IssueCard`/`IssueDetailPanel`) — found while building §35, was never wired to a real route, dates from the pre-§19 mock-data prototype. Worth fixing the same way (or removing) if that per-issue link is ever actually used.
 
 - **§25's ticketing feature has not been run against a real database yet** — migration `0013_support_tickets.sql` needs to be applied (Supabase SQL editor, same as every other migration this session), then walked through end-to-end for real before trusting it. See §25 above for the exact loop to test.
 
