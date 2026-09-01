@@ -365,6 +365,13 @@ The Generate PDF button now opens a small popover with two options, rather than 
 
 `tsc`/`eslint`/`next build` all clean. **Not yet verified against a real signed-in session in a browser** — the upload/signing path reuses an already-proven bucket and policy, but nobody has actually clicked "Copy PDF Link" and confirmed the pasted link opens the real PDF yet.
 
+### 36. "Copy as Text" added to the same menu (no migration)
+Follow-up to §35: the user tried "Copy PDF Link" and pasted it into their AI tool, and got back a bare URL string, not usable content — a copied link pastes as a URL wherever it lands, nothing on the other end fetches it automatically. That's a fundamentally different need than §35's link (which is genuinely the right tool when a screenshot needs to be seen): this one is a plain-text copy of the exact same content, so pasting into a chat input lands the real, readable text immediately.
+
+New third popover option, **`buildPdfText()`** — mirrors `buildPdfDocument()`'s structure and content (title, AI instructions, the team note if any, each item's kind/number/title/description, its report-back curl command) as one plain-text block instead of PDF layout calls, skipping the image fetch entirely since screenshots have no text form. `handleCopyPdfText()` calls `navigator.clipboard.writeText()` with it. The popover is now three options: Download as PDF, Copy as Text, Copy PDF Link.
+
+`tsc`/`eslint`/`next build` all clean.
+
 ---
 
 ## Pending / not built
