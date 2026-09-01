@@ -53,6 +53,11 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
   // since. Falls back to a fresh composition at PDF-generation time for
   // any checked item that was never expanded/edited.
   const [descriptionEdits, setDescriptionEdits] = useState<Map<string, string>>(new Map());
+  // One free-text note for the whole export (not per item) — e.g.
+  // "run npm install before testing" or "ignore the styling on #2 for
+  // now" — included in the PDF right after the AI instructions, ahead of
+  // every item's own section.
+  const [noteForAi, setNoteForAi] = useState("");
   const [generating, setGenerating] = useState(false);
   const [apiToken, setApiToken] = useState<string | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
@@ -361,6 +366,12 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
       );
       y += 3;
 
+      if (noteForAi.trim()) {
+        addHeading("Note from the team", 12);
+        addBody(noteForAi.trim());
+        y += 3;
+      }
+
       resolved.forEach(({ item, description, curl, imageDataUrl }, index) => {
         if (index > 0) addSeparator();
         addHeading(`${KIND_LABEL[item.kind]} ${itemNumbers.get(item.id)}: ${item.title}`, 14);
@@ -422,6 +433,24 @@ export function VibeCodingPanel({ projectId, issues }: { projectId: string; issu
         >
           {generating ? "Generating…" : `Generate PDF${selectedIds.size > 0 ? ` (${selectedIds.size})` : ""}`}
         </button>
+      </div>
+
+      <div className="card flex flex-col gap-1.5 p-4">
+        <label className="text-sm font-medium text-slate-900" htmlFor="vibe-coding-note">
+          Note for AI (optional)
+        </label>
+        <p className="text-xs text-slate-500">
+          Applies to the whole export, not one item — e.g. setup steps, or something to ignore
+          for now. Included in the generated PDF right below the instructions.
+        </p>
+        <textarea
+          id="vibe-coding-note"
+          value={noteForAi}
+          onChange={(e) => setNoteForAi(e.target.value)}
+          rows={2}
+          placeholder="Anything the AI should know before starting…"
+          className="input mt-1 text-sm"
+        />
       </div>
 
       <div className="flex flex-col gap-2">
