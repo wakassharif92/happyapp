@@ -7,8 +7,15 @@ import type { Project } from "@/lib/board/types";
 import {
   createPersonalTask,
   deletePersonalTask,
+  reorderPersonalTasks,
   updatePersonalTaskStatus,
 } from "@/app/dashboard/tasksActions";
+import { IconArrowDown, IconArrowUp } from "./icons";
+
+// Client-only id prefix for a task that's been added locally but hasn't
+// come back from the server yet — used to dim the row and hold off
+// reorder/status/delete until it has a real id + sort_order to act on.
+const TEMP_ID_PREFIX = "temp-";
 
 const STATUS_LABELS: Record<PersonalTaskStatus, string> = {
   pending: "Pending",
@@ -41,7 +48,6 @@ export function PersonalTasksPanel({ projects }: { projects: Project[] }) {
   const [tasks, setTasks] = useState<PersonalTask[]>([]);
   const [title, setTitle] = useState("");
   const [composerProjectId, setComposerProjectId] = useState("");
-  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,7 +57,7 @@ export function PersonalTasksPanel({ projects }: { projects: Project[] }) {
       .from("personal_tasks")
       .select("*")
       .eq("task_date", selectedDate)
-      .order("created_at", { ascending: true })
+      .order("sort_order", { ascending: true })
       .then(({ data }) => {
         if (!cancelled) setTasks(data ?? []);
       });
@@ -61,19 +67,39 @@ export function PersonalTasksPanel({ projects }: { projects: Project[] }) {
     };
   }, [selectedDate]);
 
+  // Appends a local placeholder task immediately, before the server round
+  // trip even starts — that's the whole fix for "adding takes time to
+  // show up": the row was previously only added once createPersonalTask
+  // resolved. Reconciled with the real row (real id + sort_order) once
+  // the server responds; rolled back on failure.
   async function handleAdd() {
-    if (!title.trim()) return;
-    setSubmitting(true);
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    const tempId = `${TEMP_ID_PREFIX}${crypto.randomUUID()}`;
+    const optimisticTask: PersonalTask = {
+      id: tempId,
+      company_id: "",
+      user_id: "",
+      project_id: composerProjectId || null,
+      task_date: selectedDate,
+      title: trimmed,
+      status: "pending",
+      sort_order: Date.now(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    setTasks((prev) => [...prev, optimisticTask]);
+    setTitle("");
     try {
       const created = await createPersonalTask({
-        title: title.trim(),
+        title: trimmed,
         taskDate: selectedDate,
         projectId: composerProjectId || null,
       });
-      setTasks((prev) => [...prev, created]);
-      setTitle("");
-    } finally {
-      setSubmitting(false);
+      setTasks((prev) => prev.map((t) => (t.id === tempId ? created : t)));
+    } catch {
+      setTasks((prev) => prev.filter((t) => t.id !== tempId));
+      setTitle(trimmed);
     }
   }
 
@@ -85,6 +111,30 @@ export function PersonalTasksPanel({ projects }: { projects: Project[] }) {
   async function handleDelete(id: string) {
     setTasks((prev) => prev.filter((t) => t.id !== id));
     await deletePersonalTask(id);
+  }
+
+  // Swaps the task's sort_order with its neighbor in the current day's
+  // list — same mechanism as DashboardClient.tsx's handleReorder for
+  // issues. No-ops on a still-optimistic (temp id) row on either side,
+  // since it has no real sort_order to swap yet.
+  function handleReorder(id: string, direction: "up" | "down") {
+    const idx = tasks.findIndex((t) => t.id === id);
+    if (idx === -1) return;
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= tasks.length) return;
+    const a = tasks[idx];
+    const b = tasks[swapIdx];
+    if (a.id.startsWith(TEMP_ID_PREFIX) || b.id.startsWith(TEMP_ID_PREFIX)) return;
+    setTasks((prev) =>
+      prev
+        .map((t) => {
+          if (t.id === a.id) return { ...t, sort_order: b.sort_order };
+          if (t.id === b.id) return { ...t, sort_order: a.sort_order };
+          return t;
+        })
+        .sort((x, y) => x.sort_order - y.sort_order)
+    );
+    reorderPersonalTasks(a.id, b.sort_order, b.id, a.sort_order);
   }
 
   const projectName = (id: string | null) => projects.find((p) => p.id === id)?.name ?? null;
@@ -135,7 +185,7 @@ export function PersonalTasksPanel({ projects }: { projects: Project[] }) {
           <button
             type="button"
             onClick={handleAdd}
-            disabled={submitting || !title.trim()}
+            disabled={!title.trim()}
             className="btn-primary shrink-0"
           >
             Add
@@ -147,34 +197,65 @@ export function PersonalTasksPanel({ projects }: { projects: Project[] }) {
         {tasks.length === 0 ? (
           <p className="text-sm text-slate-400">No tasks for this day.</p>
         ) : (
-          tasks.map((task) => (
-            <div key={task.id} className="card flex items-center gap-3 p-3.5">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-slate-900">{task.title}</p>
-                {task.project_id && (
-                  <p className="text-xs text-slate-400">{projectName(task.project_id)}</p>
-                )}
+          tasks.map((task, index) => {
+            const isPending = task.id.startsWith(TEMP_ID_PREFIX);
+            return (
+              <div
+                key={task.id}
+                className={`card flex items-center gap-3 p-3.5 ${isPending ? "opacity-60" : ""}`}
+              >
+                <div className="flex shrink-0 flex-col items-center justify-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => handleReorder(task.id, "up")}
+                    disabled={isPending || index === 0}
+                    title="Move up in priority"
+                    className="flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30"
+                  >
+                    <IconArrowUp className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleReorder(task.id, "down")}
+                    disabled={isPending || index === tasks.length - 1}
+                    title="Move down in priority"
+                    className="flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30"
+                  >
+                    <IconArrowDown className="h-4 w-4" />
+                  </button>
+                </div>
+                <span className="w-5 shrink-0 text-right text-sm font-medium text-slate-400 tabular-nums">
+                  {index + 1}.
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-slate-900">{task.title}</p>
+                  {task.project_id && (
+                    <p className="text-xs text-slate-400">{projectName(task.project_id)}</p>
+                  )}
+                </div>
+                <select
+                  value={task.status}
+                  disabled={isPending}
+                  onChange={(e) => handleStatusChange(task.id, e.target.value as PersonalTaskStatus)}
+                  className="shrink-0 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 disabled:opacity-50"
+                >
+                  {STATUS_ORDER.map((s) => (
+                    <option key={s} value={s}>
+                      {STATUS_LABELS[s]}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(task.id)}
+                  disabled={isPending}
+                  className="shrink-0 text-xs text-slate-400 hover:text-red-600 disabled:opacity-50"
+                >
+                  Delete
+                </button>
               </div>
-              <select
-                value={task.status}
-                onChange={(e) => handleStatusChange(task.id, e.target.value as PersonalTaskStatus)}
-                className="shrink-0 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700"
-              >
-                {STATUS_ORDER.map((s) => (
-                  <option key={s} value={s}>
-                    {STATUS_LABELS[s]}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={() => handleDelete(task.id)}
-                className="shrink-0 text-xs text-slate-400 hover:text-red-600"
-              >
-                Delete
-              </button>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

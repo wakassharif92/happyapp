@@ -339,6 +339,7 @@ export type PersonalTask = {
   task_date: string;
   title: string;
   status: PersonalTaskStatus;
+  sort_order: number;
   created_at: string;
   updated_at: string;
 };

@@ -3,6 +3,7 @@ import type { CompanyMember } from "@/lib/types/database";
 
 export type CurrentMember = {
   id: string;
+  userId: string;
   companyId: string;
   companyName: string;
   name: string;
@@ -45,6 +46,7 @@ export async function getCurrentMember(): Promise<CurrentMember | null> {
 
   return {
     id: data.id,
+    userId: user.id,
     companyId: data.company_id,
     companyName: company?.name ?? "",
     name: data.name,
