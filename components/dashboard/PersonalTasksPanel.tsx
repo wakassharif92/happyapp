@@ -26,8 +26,6 @@ const STATUS_LABELS: Record<PersonalTaskStatus, string> = {
 
 const STATUS_ORDER: PersonalTaskStatus[] = ["pending", "in_progress", "done"];
 
-type TaskTab = "pending" | "done";
-
 function toDateKey(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -51,17 +49,19 @@ function formatTaskDate(dateKey: string, today: string): string {
   });
 }
 
-// Two tabs — Pending (anything not yet marked Done) and Done — rather
-// than the single-day view this used to be. A task carries its date as
-// a label on the row instead of being the thing that scopes the list,
-// since a task that rolls over (see rolloverOverdueTasks) or is
-// deliberately scheduled ahead no longer lines up with "the selected
-// day" as a concept. Private per-member (RLS: user_id = auth.uid()),
-// company-wide (not scoped to whichever project is currently selected),
-// with an optional per-task project tag like NotesPanel.tsx.
+// Two stacked sections — Pending (anything not yet marked Done) on top,
+// Done below — rather than the single-day view this used to be, and
+// rather than tabs (tried first, but switching away hides the other
+// list, which felt worse here than just always showing both). A task
+// carries its date as a label on the row instead of being the thing
+// that scopes the list, since a task that rolls over (see
+// rolloverOverdueTasks) or is deliberately scheduled ahead no longer
+// lines up with "the selected day" as a concept. Private per-member
+// (RLS: user_id = auth.uid()), company-wide (not scoped to whichever
+// project is currently selected), with an optional per-task project tag
+// like NotesPanel.tsx.
 export function PersonalTasksPanel({ projects }: { projects: Project[] }) {
   const today = toDateKey(new Date());
-  const [activeTab, setActiveTab] = useState<TaskTab>("pending");
   const [tasks, setTasks] = useState<PersonalTask[]>([]);
   const [title, setTitle] = useState("");
   const [composerProjectId, setComposerProjectId] = useState("");
@@ -116,7 +116,6 @@ export function PersonalTasksPanel({ projects }: { projects: Project[] }) {
     };
     setTasks((prev) => [...prev, optimisticTask]);
     setTitle("");
-    setActiveTab("pending");
     try {
       const created = await createPersonalTask({
         title: trimmed,
@@ -142,20 +141,18 @@ export function PersonalTasksPanel({ projects }: { projects: Project[] }) {
 
   const pendingTasks = tasks.filter((t) => t.status !== "done");
   const doneTasks = tasks.filter((t) => t.status === "done");
-  const visibleTasks = activeTab === "pending" ? pendingTasks : doneTasks;
 
-  // Swaps the task's sort_order with its neighbor in the currently
-  // visible (Pending or Done) list — same mechanism as
-  // DashboardClient.tsx's handleReorder for issues. No-ops on a still
-  // -optimistic (temp id) row on either side, since it has no real
-  // sort_order to swap yet.
-  function handleReorder(id: string, direction: "up" | "down") {
-    const idx = visibleTasks.findIndex((t) => t.id === id);
+  // Swaps the task's sort_order with its neighbor within whichever list
+  // (Pending or Done) it's in — same mechanism as DashboardClient.tsx's
+  // handleReorder for issues. No-ops on a still-optimistic (temp id) row
+  // on either side, since it has no real sort_order to swap yet.
+  function handleReorder(list: PersonalTask[], id: string, direction: "up" | "down") {
+    const idx = list.findIndex((t) => t.id === id);
     if (idx === -1) return;
     const swapIdx = direction === "up" ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= visibleTasks.length) return;
-    const a = visibleTasks[idx];
-    const b = visibleTasks[swapIdx];
+    if (swapIdx < 0 || swapIdx >= list.length) return;
+    const a = list[idx];
+    const b = list[swapIdx];
     // Only swap within the same day — the list is sorted by date first,
     // so a sort_order swap across two different dates would get
     // immediately undone by that ordering anyway (and reordering "today"
@@ -178,23 +175,76 @@ export function PersonalTasksPanel({ projects }: { projects: Project[] }) {
 
   const projectName = (id: string | null) => projects.find((p) => p.id === id)?.name ?? null;
 
+  function renderTaskRow(task: PersonalTask, index: number, list: PersonalTask[]) {
+    const isPending = task.id.startsWith(TEMP_ID_PREFIX);
+    return (
+      <div
+        key={task.id}
+        className={`card flex items-center gap-3 p-3.5 ${isPending ? "opacity-60" : ""}`}
+      >
+        <div className="flex shrink-0 flex-col items-center justify-center gap-0.5">
+          <button
+            type="button"
+            onClick={() => handleReorder(list, task.id, "up")}
+            disabled={isPending || index === 0 || list[index - 1].task_date !== task.task_date}
+            title="Move up in priority"
+            className="flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30"
+          >
+            <IconArrowUp className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => handleReorder(list, task.id, "down")}
+            disabled={
+              isPending || index === list.length - 1 || list[index + 1].task_date !== task.task_date
+            }
+            title="Move down in priority"
+            className="flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30"
+          >
+            <IconArrowDown className="h-4 w-4" />
+          </button>
+        </div>
+        <span className="w-5 shrink-0 text-right text-sm font-medium text-slate-400 tabular-nums">
+          {index + 1}.
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-slate-900">{task.title}</p>
+          <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-400">
+            <span>{formatTaskDate(task.task_date, today)}</span>
+            {task.project_id && (
+              <>
+                <span>·</span>
+                <span>{projectName(task.project_id)}</span>
+              </>
+            )}
+          </p>
+        </div>
+        <select
+          value={task.status}
+          disabled={isPending}
+          onChange={(e) => handleStatusChange(task.id, e.target.value as PersonalTaskStatus)}
+          className="shrink-0 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 disabled:opacity-50"
+        >
+          {STATUS_ORDER.map((s) => (
+            <option key={s} value={s}>
+              {STATUS_LABELS[s]}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={() => handleDelete(task.id)}
+          disabled={isPending}
+          className="shrink-0 text-xs text-slate-400 hover:text-red-600 disabled:opacity-50"
+        >
+          Delete
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex gap-2">
-        <TaskTabButton
-          label="Pending"
-          count={pendingTasks.length}
-          active={activeTab === "pending"}
-          onClick={() => setActiveTab("pending")}
-        />
-        <TaskTabButton
-          label="Done"
-          count={doneTasks.length}
-          active={activeTab === "done"}
-          onClick={() => setActiveTab("done")}
-        />
-      </div>
-
       <div className="card flex flex-col gap-2 p-4">
         <div className="flex flex-wrap gap-2">
           <input
@@ -246,118 +296,27 @@ export function PersonalTasksPanel({ projects }: { projects: Project[] }) {
       </div>
 
       <div className="flex flex-col gap-2">
-        {visibleTasks.length === 0 ? (
-          <p className="text-sm text-slate-400">
-            {activeTab === "pending" ? "No pending tasks." : "Nothing done yet."}
-          </p>
+        <h3 className="text-sm font-semibold text-slate-900">
+          Pending <span className="font-normal text-slate-400">({pendingTasks.length})</span>
+        </h3>
+        {pendingTasks.length === 0 ? (
+          <p className="text-sm text-slate-400">No pending tasks.</p>
         ) : (
-          visibleTasks.map((task, index) => {
-            const isPending = task.id.startsWith(TEMP_ID_PREFIX);
-            return (
-              <div
-                key={task.id}
-                className={`card flex items-center gap-3 p-3.5 ${isPending ? "opacity-60" : ""}`}
-              >
-                <div className="flex shrink-0 flex-col items-center justify-center gap-0.5">
-                  <button
-                    type="button"
-                    onClick={() => handleReorder(task.id, "up")}
-                    disabled={
-                      isPending || index === 0 || visibleTasks[index - 1].task_date !== task.task_date
-                    }
-                    title="Move up in priority"
-                    className="flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30"
-                  >
-                    <IconArrowUp className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleReorder(task.id, "down")}
-                    disabled={
-                      isPending ||
-                      index === visibleTasks.length - 1 ||
-                      visibleTasks[index + 1].task_date !== task.task_date
-                    }
-                    title="Move down in priority"
-                    className="flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30"
-                  >
-                    <IconArrowDown className="h-4 w-4" />
-                  </button>
-                </div>
-                <span className="w-5 shrink-0 text-right text-sm font-medium text-slate-400 tabular-nums">
-                  {index + 1}.
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-slate-900">{task.title}</p>
-                  <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-400">
-                    <span>{formatTaskDate(task.task_date, today)}</span>
-                    {task.project_id && (
-                      <>
-                        <span>·</span>
-                        <span>{projectName(task.project_id)}</span>
-                      </>
-                    )}
-                  </p>
-                </div>
-                <select
-                  value={task.status}
-                  disabled={isPending}
-                  onChange={(e) => handleStatusChange(task.id, e.target.value as PersonalTaskStatus)}
-                  className="shrink-0 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 disabled:opacity-50"
-                >
-                  {STATUS_ORDER.map((s) => (
-                    <option key={s} value={s}>
-                      {STATUS_LABELS[s]}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(task.id)}
-                  disabled={isPending}
-                  className="shrink-0 text-xs text-slate-400 hover:text-red-600 disabled:opacity-50"
-                >
-                  Delete
-                </button>
-              </div>
-            );
-          })
+          pendingTasks.map((task, index) => renderTaskRow(task, index, pendingTasks))
+        )}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <h3 className="text-sm font-semibold text-slate-900">
+          Done <span className="font-normal text-slate-400">({doneTasks.length})</span>
+        </h3>
+        {doneTasks.length === 0 ? (
+          <p className="text-sm text-slate-400">Nothing done yet.</p>
+        ) : (
+          doneTasks.map((task, index) => renderTaskRow(task, index, doneTasks))
         )}
       </div>
     </div>
-  );
-}
-
-function TaskTabButton({
-  label,
-  count,
-  active,
-  onClick,
-}: {
-  label: string;
-  count: number;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
-        active
-          ? "bg-indigo-600 text-white"
-          : "border border-slate-300 text-slate-600 hover:bg-slate-50"
-      }`}
-    >
-      {label}
-      <span
-        className={`rounded-full px-1.5 py-0.5 text-xs tabular-nums ${
-          active ? "bg-white/20" : "bg-slate-100 text-slate-500"
-        }`}
-      >
-        {count}
-      </span>
-    </button>
   );
 }
 
