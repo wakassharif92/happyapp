@@ -24,6 +24,7 @@ export function IssueCard({
   onReorder,
   onCopyLink,
   onConvertToDev,
+  onDelete,
 }: {
   issue: Issue;
   hasUnreadDevReply?: boolean;
@@ -43,6 +44,7 @@ export function IssueCard({
   onReorder: (id: string, direction: "up" | "down") => void;
   onCopyLink: (id: string) => void;
   onConvertToDev: (id: string) => void;
+  onDelete: (id: string) => void;
 }) {
   const [copied, setCopied] = useState(false);
   const isComplaint = issue.tab === "user_complaints";
@@ -190,6 +192,7 @@ export function IssueCard({
               currentTab={issue.tab}
               onMove={(tab) => onMove(issue.id, tab)}
               onConvert={onConvert ? (kind) => onConvert(issue.id, kind) : undefined}
+              onDelete={() => onDelete(issue.id)}
               compact
             />
           </div>

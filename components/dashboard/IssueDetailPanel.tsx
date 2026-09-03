@@ -9,7 +9,7 @@ import { CategoryDropdown } from "./CategoryDropdown";
 import { SeverityTag } from "./SeverityTag";
 import { StatusBadge } from "./StatusBadge";
 import { Thumbnail } from "./Thumbnail";
-import { IconChevronDown, IconClose, IconCopy, IconTicket } from "./icons";
+import { IconChevronDown, IconClose, IconCopy, IconTicket, IconTrash } from "./icons";
 
 export function IssueDetailPanel({
   issue,
@@ -22,6 +22,7 @@ export function IssueDetailPanel({
   onAddComment,
   onConvertToDev,
   onViewTicketConversation,
+  onDelete,
 }: {
   issue: Issue | null;
   projectName: string;
@@ -33,6 +34,7 @@ export function IssueDetailPanel({
   onAddComment: (id: string, text: string) => void;
   onConvertToDev: (id: string) => void;
   onViewTicketConversation: (conversationId: string, ticketNumber: number) => void;
+  onDelete: (id: string) => void;
 }) {
   const [draft, setDraft] = useState("");
   const [copied, setCopied] = useState(false);
@@ -217,6 +219,18 @@ export function IssueDetailPanel({
           >
             <IconCopy className="h-4 w-4" />
             {copied ? "Copied!" : "Copy Public PDF Link"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              onDelete(issue.id);
+              onClose();
+            }}
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50"
+          >
+            <IconTrash className="h-4 w-4" />
+            Delete Issue
           </button>
 
           <div>

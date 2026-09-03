@@ -12,6 +12,14 @@ export async function updateIssueCategory(issueId: string, category: Category) {
   revalidatePath("/dashboard");
 }
 
+// Permanent delete — every child row (comments, activity, extra images)
+// cascades via its own FK, no cleanup needed here.
+export async function deleteIssue(issueId: string) {
+  const supabase = await createClient();
+  await supabase.from("board_issues").delete().eq("id", issueId);
+  revalidatePath("/dashboard");
+}
+
 export async function moveIssue(issueId: string, tab: TabKey) {
   const supabase = await createClient();
   const member = await getCurrentMember();

@@ -27,6 +27,7 @@ import { createFeatureRequest, convertIssueToFeatureRequest } from "./featuresAc
 import {
   addComment,
   createIssue,
+  deleteIssue,
   getIssueExtraMedia,
   getIssueThread,
   moveIssue,
@@ -97,6 +98,11 @@ export function DashboardClient({
   const [latestAgentReplyByConversation, setLatestAgentReplyByConversation] = useState<
     Map<string, string>
   >(new Map());
+  // Sidebar counts for the non-board_issues tabs (Features/Suggestions/
+  // Later On/Notes) — those panels fetch their own lists independently
+  // and only when their tab is actually mounted, so this component has
+  // no other visibility into their counts; see the effect below.
+  const [extraCounts, setExtraCounts] = useState<Partial<Record<BoardView, number>>>({});
 
   const currentProject = initialProjects.find((p) => p.id === currentProjectId) ?? null;
 
@@ -220,6 +226,67 @@ export function DashboardClient({
     return result;
   }, [projectIssues]);
 
+  // Features/Suggestions/Later On (project-scoped) and Notes
+  // (company-wide) counts for the sidebar badges — fetched independently
+  // of whichever panel is actually mounted, since only the currently
+  // active tab's panel loads its own list. Realtime is treated as a
+  // plain "something changed, refetch" signal rather than computed
+  // deltas — a DELETE payload doesn't reliably carry the old row's
+  // project_id/kind without REPLICA IDENTITY FULL on these tables, and
+  // these are low-frequency actions where one extra count query is
+  // cheaper than that schema change.
+  useEffect(() => {
+    if (!currentProjectId) return;
+    let cancelled = false;
+    const supabase = createClient();
+
+    async function loadExtraCounts() {
+      const [{ count: featureCount }, { count: suggestionCount }, { count: laterOnCount }, { count: notesCount }] =
+        await Promise.all([
+          supabase
+            .from("feature_requests")
+            .select("*", { count: "exact", head: true })
+            .eq("project_id", currentProjectId)
+            .eq("kind", "feature"),
+          supabase
+            .from("feature_requests")
+            .select("*", { count: "exact", head: true })
+            .eq("project_id", currentProjectId)
+            .eq("kind", "suggestion"),
+          supabase
+            .from("feature_requests")
+            .select("*", { count: "exact", head: true })
+            .eq("project_id", currentProjectId)
+            .eq("kind", "later_on"),
+          supabase.from("notes").select("*", { count: "exact", head: true }),
+        ]);
+      if (cancelled) return;
+      setExtraCounts({
+        features: featureCount ?? 0,
+        suggestions: suggestionCount ?? 0,
+        later_on: laterOnCount ?? 0,
+        notes: notesCount ?? 0,
+      });
+    }
+
+    loadExtraCounts();
+
+    const channel = supabase
+      .channel(`sidebar-extra-counts-${currentProjectId}-${crypto.randomUUID()}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "feature_requests" }, () => {
+        if (!cancelled) loadExtraCounts();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "notes" }, () => {
+        if (!cancelled) loadExtraCounts();
+      })
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, [currentProjectId]);
+
   const visibleIssues = useMemo(() => {
     if (!isTabKey(activeView)) return [];
     const q = search.trim().toLowerCase();
@@ -329,6 +396,12 @@ export function DashboardClient({
   function handleCopyLink(id: string) {
     const url = `https://qa-agent.internal/issues/${id}/pdf`;
     navigator.clipboard?.writeText(url).catch(() => {});
+  }
+
+  function handleDeleteIssue(id: string) {
+    setIssues((prev) => prev.filter((i) => i.id !== id));
+    if (selectedIssueId === id) setSelectedIssueId(null);
+    deleteIssue(id);
   }
 
   async function handleAddComment(id: string, text: string) {
@@ -498,7 +571,7 @@ export function DashboardClient({
         onProjectChange={setCurrentProjectId}
         activeView={activeView}
         onViewChange={setActiveView}
-        counts={counts}
+        counts={{ ...counts, ...extraCounts }}
       />
 
       <div className="flex flex-1 flex-col overflow-hidden">
@@ -536,6 +609,7 @@ export function DashboardClient({
                       onReorder={handleReorder}
                       onCopyLink={handleCopyLink}
                       onConvertToDev={handleConvertToDev}
+                      onDelete={handleDeleteIssue}
                     />
                   ))
                 )}
@@ -566,6 +640,7 @@ export function DashboardClient({
         onCopyLink={handleCopyLink}
         onAddComment={handleAddComment}
         onConvertToDev={handleConvertToDev}
+        onDelete={handleDeleteIssue}
         onViewTicketConversation={(conversationId, ticketNumber) => {
           setTicketConversation({ conversationId, ticketNumber });
           if (selectedIssue) {

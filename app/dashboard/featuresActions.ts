@@ -45,6 +45,12 @@ export async function updateFeatureRequestStatus(id: string, status: FeatureRequ
   revalidatePath("/dashboard");
 }
 
+export async function deleteFeatureRequest(id: string) {
+  const supabase = await createClient();
+  await supabase.from("feature_requests").delete().eq("id", id);
+  revalidatePath("/dashboard");
+}
+
 // Used by the dev-side "Move to Feature/Suggestion" dropdown on an
 // existing issue — creates the feature_requests row (carrying
 // source_issue_id so the card shows where it came from) and moves the

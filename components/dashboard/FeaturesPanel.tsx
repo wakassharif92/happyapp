@@ -3,7 +3,11 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { FeatureRequest, FeatureRequestKind, FeatureRequestStatus } from "@/lib/types/database";
-import { createFeatureRequest, updateFeatureRequestStatus } from "@/app/dashboard/featuresActions";
+import {
+  createFeatureRequest,
+  deleteFeatureRequest,
+  updateFeatureRequestStatus,
+} from "@/app/dashboard/featuresActions";
 
 const STATUS_LABELS: Record<FeatureRequestStatus, string> = {
   pending: "Pending",
@@ -65,6 +69,14 @@ export function FeaturesPanel({ projectId, kind }: { projectId: string; kind: Fe
           setItems((prev) => prev.map((i) => (i.id === row.id ? row : i)));
         }
       )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "feature_requests" },
+        (payload) => {
+          const row = payload.old as { id: string };
+          setItems((prev) => prev.filter((i) => i.id !== row.id));
+        }
+      )
       .subscribe();
 
     return () => {
@@ -94,6 +106,11 @@ export function FeaturesPanel({ projectId, kind }: { projectId: string; kind: Fe
   async function handleStatusChange(id: string, status: FeatureRequestStatus) {
     setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status } : i)));
     await updateFeatureRequestStatus(id, status);
+  }
+
+  async function handleDelete(id: string) {
+    setItems((prev) => prev.filter((i) => i.id !== id));
+    await deleteFeatureRequest(id);
   }
 
   const noun = NOUN[kind];
@@ -156,9 +173,18 @@ export function FeaturesPanel({ projectId, kind }: { projectId: string; kind: Fe
                   ))}
                 </select>
               </div>
-              <p className="text-xs text-slate-400">
-                {item.created_by} · {new Date(item.created_at).toLocaleDateString()}
-              </p>
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-slate-400">
+                  {item.created_by} · {new Date(item.created_at).toLocaleDateString()}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(item.id)}
+                  className="text-xs text-slate-400 hover:text-red-600"
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           ))
         )}

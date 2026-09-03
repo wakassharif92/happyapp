@@ -10,6 +10,7 @@ export function MoveToMenu({
   currentTab,
   onMove,
   onConvert,
+  onDelete,
   compact = false,
 }: {
   currentTab: TabKey;
@@ -20,6 +21,8 @@ export function MoveToMenu({
   // convertIssueToFeatureRequest). Optional so MoveToMenu still works
   // anywhere it's used without this wired up.
   onConvert?: (kind: FeatureRequestKind) => void;
+  // Permanent delete — optional for the same reason as onConvert.
+  onDelete?: () => void;
   compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -86,6 +89,21 @@ export function MoveToMenu({
                   className="block w-full px-3 py-1.5 text-left text-sm text-[var(--db-fg)] transition-colors hover:bg-[var(--db-surface-hover)]"
                 >
                   Move to Later On
+                </button>
+              </>
+            )}
+            {onDelete && (
+              <>
+                <div className="my-1 border-t border-[var(--db-border)]" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    onDelete();
+                    setOpen(false);
+                  }}
+                  className="block w-full px-3 py-1.5 text-left text-sm text-red-600 transition-colors hover:bg-red-50"
+                >
+                  Delete Issue
                 </button>
               </>
             )}
