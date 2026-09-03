@@ -402,6 +402,23 @@ Two requests bundled in one message:
 
 `tsc`/`eslint`/`next build` all clean. No migration — every table involved already existed.
 
+### 40. Fixed: image upload from the public Report link failed on real phone photos (no migration)
+The user reported "page could not load" after attaching an image and submitting the `/report/[projectId]` link from a real phone. Root cause: Next.js Server Actions cap the request body at **1MB by default**, and the Report/Team Report forms and Support Chat's image upload all submit their image as `FormData` straight to a server action — a normal phone photo (routinely 2-8MB) blows past that limit, and the whole request fails *before* the action's own code (and its graceful `{ error }` state via `useActionState`) ever runs. This affected every FormData-based image upload in the app: `/report/[projectId]` (Internal Team link), `/team-report` (global form), the legacy `/projects/[projectId]/report`, and Support Chat's image attach — none of them are exempt since they all share this one Next.js-wide default.
+
+Fixed globally in `next.config.ts`: `experimental.serverActions.bodySizeLimit: "10mb"`. One config change covers every affected surface — none of the individual action files needed touching. (`NewIssueModal.tsx`'s multi-image picker, §38, was never affected — it uploads directly to Storage client-side rather than going through a server action.)
+
+`tsc`/`eslint`/`next build` all clean. **Not yet confirmed fixed against a real phone photo** — deployed, but the follow-up verification (a real oversized image through the live link) hasn't landed yet; worth confirming directly with the user's own phone test.
+
+### 41. Personal Tasks redesigned around Pending/Done tabs with auto-rollover (no migration)
+Replaces the single-day Yesterday/Today/Tomorrow view (§7-era) with two tabs, **Pending** (anything not marked Done) and **Done** — each task now shows its own date as a small label on the row instead of the date being what scopes the whole list, since a task that rolls over or is deliberately scheduled ahead no longer lines up with "the one selected day" as a concept.
+
+- **Auto-rollover**: "a pending task not finished the same day moves itself to the next day" — rather than a nightly cron (no scheduler infra exists anywhere in this app), `rolloverOverdueTasks(todayKey)` (`tasksActions.ts`) runs once whenever `PersonalTasksPanel` loads: one `UPDATE ... WHERE task_date < today AND status != 'done'` pulls every overdue pending task forward to today before the list is fetched. Since the UI only ever shows "as of today," one jump straight to today produces the same observable end state as a literal day-by-day rollover would, with zero scheduler needed.
+- **Composer** keeps a compact Today/Tomorrow + date-picker so a task can still be deliberately scheduled ahead, even though the main list is no longer filtered to a single day.
+- **Priority reordering restricted to same-day neighbors** — the list is sorted `task_date` first then `sort_order`, so a `sort_order` swap between two tasks on different dates would just get silently undone by that date-first sort on the next render; the up/down arrows are disabled across a date boundary rather than producing a swap that visibly does nothing.
+- Numbering ("1.", "2.", …) now restarts per tab, matching each tab's own filtered list.
+
+`tsc`/`eslint`/`next build` all clean.
+
 ---
 
 ## Pending / not built
