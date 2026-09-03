@@ -36,16 +36,19 @@ export function IssueDetailPanel({
 }) {
   const [draft, setDraft] = useState("");
   const [copied, setCopied] = useState(false);
-  const [lightboxOpen, setLightboxOpen] = useState(false);
+  // Which image is open full-screen — the primary Thumbnail or any of
+  // issue.extraMediaUrls — rather than a plain boolean, since there can
+  // now be more than one image to zoom into.
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!lightboxOpen) return;
+    if (!lightboxUrl) return;
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") setLightboxOpen(false);
+      if (e.key === "Escape") setLightboxUrl(null);
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [lightboxOpen]);
+  }, [lightboxUrl]);
 
   if (!issue) return null;
   const isComplaint = issue.tab === "user_complaints";
@@ -75,27 +78,49 @@ export function IssueDetailPanel({
         </div>
 
         <div className="flex flex-col gap-5 p-4">
-          {issue.mediaType === "image" && issue.mediaUrl ? (
-            <button
-              type="button"
-              onClick={() => setLightboxOpen(true)}
-              className="cursor-zoom-in text-left"
-            >
+          <div className="flex flex-col gap-2">
+            {issue.mediaType === "image" && issue.mediaUrl ? (
+              <button
+                type="button"
+                onClick={() => setLightboxUrl(issue.mediaUrl)}
+                className="cursor-zoom-in text-left"
+              >
+                <Thumbnail
+                  mediaType={issue.mediaType}
+                  color={issue.thumbnailColor}
+                  mediaUrl={issue.mediaUrl}
+                  size="lg"
+                />
+              </button>
+            ) : (
               <Thumbnail
                 mediaType={issue.mediaType}
                 color={issue.thumbnailColor}
                 mediaUrl={issue.mediaUrl}
                 size="lg"
               />
-            </button>
-          ) : (
-            <Thumbnail
-              mediaType={issue.mediaType}
-              color={issue.thumbnailColor}
-              mediaUrl={issue.mediaUrl}
-              size="lg"
-            />
-          )}
+            )}
+
+            {issue.extraMediaUrls.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {issue.extraMediaUrls.map((url) => (
+                  <button
+                    key={url}
+                    type="button"
+                    onClick={() => setLightboxUrl(url)}
+                    className="cursor-zoom-in"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={url}
+                      alt="Additional attachment"
+                      className="h-16 w-16 rounded-lg border border-[var(--db-border)] object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           <div>
             <h2 className="text-lg font-semibold text-[var(--db-fg)]">{issue.title}</h2>
@@ -247,14 +272,14 @@ export function IssueDetailPanel({
         </div>
       </div>
 
-      {lightboxOpen && issue.mediaUrl && (
+      {lightboxUrl && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
-          onClick={() => setLightboxOpen(false)}
+          onClick={() => setLightboxUrl(null)}
         >
           <button
             type="button"
-            onClick={() => setLightboxOpen(false)}
+            onClick={() => setLightboxUrl(null)}
             title="Close"
             className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
           >
@@ -262,7 +287,7 @@ export function IssueDetailPanel({
           </button>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={issue.mediaUrl}
+            src={lightboxUrl}
             alt={issue.title}
             className="max-h-full max-w-full rounded-lg object-contain"
             onClick={(e) => e.stopPropagation()}

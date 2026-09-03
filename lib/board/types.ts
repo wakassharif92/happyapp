@@ -41,6 +41,11 @@ export type Issue = {
   severity?: Severity;
   mediaType: MediaType;
   mediaUrl: string | null;
+  // Images beyond the primary mediaUrl (board_issue_media, migration
+  // 0022) — only ever set for manually-created issues with more than
+  // one attached image. Lazy-loaded the same way comments/activity are
+  // (see DashboardClient.tsx's selectedIssueId effect), empty until then.
+  extraMediaUrls: string[];
   thumbnailColor: string;
   createdAt: string;
   comments: Comment[];

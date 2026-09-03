@@ -224,6 +224,19 @@ export type BoardIssueActivity = {
   created_at: string;
 };
 
+// Extra images on a manually-created issue beyond the first — see
+// migration 0022. board_issues.media_url stays the single "primary"
+// image every other code path already expects; this only ever holds
+// the 2nd, 3rd, ... images from the New Issue modal's multi-image
+// picker.
+export type BoardIssueMedia = {
+  id: string;
+  company_id: string;
+  issue_id: string;
+  media_url: string;
+  created_at: string;
+};
+
 export type SlackConnectionStatus = "pending_channel" | "connected" | "disconnected";
 
 export type SlackConnection = {
@@ -458,6 +471,13 @@ export type Database = {
         Insert: Partial<BoardIssueActivity> &
           Pick<BoardIssueActivity, "company_id" | "issue_id" | "text" | "actor">;
         Update: Partial<Omit<BoardIssueActivity, "id">>;
+        Relationships: [];
+      };
+      board_issue_media: {
+        Row: BoardIssueMedia;
+        Insert: Partial<BoardIssueMedia> &
+          Pick<BoardIssueMedia, "company_id" | "issue_id" | "media_url">;
+        Update: Partial<Omit<BoardIssueMedia, "id">>;
         Relationships: [];
       };
       slack_connections: {

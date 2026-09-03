@@ -27,6 +27,7 @@ import { createFeatureRequest, convertIssueToFeatureRequest } from "./featuresAc
 import {
   addComment,
   createIssue,
+  getIssueExtraMedia,
   getIssueThread,
   moveIssue,
   reorderIssues,
@@ -57,6 +58,7 @@ function toUiIssue(row: BoardIssue): Issue {
     severity: row.severity ?? undefined,
     mediaType: row.media_type,
     mediaUrl: row.media_url,
+    extraMediaUrls: [],
     thumbnailColor: colorForId(row.id),
     createdAt: row.created_at,
     comments: [],
@@ -239,36 +241,40 @@ export function DashboardClient({
 
   const selectedIssue = issues.find((i) => i.id === selectedIssueId) ?? null;
 
-  // Comments/activity are lazy-loaded per issue (not fetched for the whole
-  // board up front) — only the currently open detail panel needs them.
+  // Comments/activity/extra images are lazy-loaded per issue (not fetched
+  // for the whole board up front) — only the currently open detail panel
+  // needs them.
   useEffect(() => {
     if (!selectedIssueId || loadedThreads.has(selectedIssueId)) return;
     let cancelled = false;
-    getIssueThread(selectedIssueId).then(({ comments, activity }) => {
-      if (cancelled) return;
-      setIssues((prev) =>
-        prev.map((i) =>
-          i.id === selectedIssueId
-            ? {
-                ...i,
-                comments: comments.map((c) => ({
-                  id: c.id,
-                  author: c.author,
-                  text: c.text,
-                  createdAt: c.created_at,
-                })),
-                activity: activity.map((a) => ({
-                  id: a.id,
-                  text: a.text,
-                  actor: a.actor,
-                  createdAt: a.created_at,
-                })),
-              }
-            : i
-        )
-      );
-      setLoadedThreads((prev) => new Set(prev).add(selectedIssueId));
-    });
+    Promise.all([getIssueThread(selectedIssueId), getIssueExtraMedia(selectedIssueId)]).then(
+      ([{ comments, activity }, extraMediaUrls]) => {
+        if (cancelled) return;
+        setIssues((prev) =>
+          prev.map((i) =>
+            i.id === selectedIssueId
+              ? {
+                  ...i,
+                  comments: comments.map((c) => ({
+                    id: c.id,
+                    author: c.author,
+                    text: c.text,
+                    createdAt: c.created_at,
+                  })),
+                  activity: activity.map((a) => ({
+                    id: a.id,
+                    text: a.text,
+                    actor: a.actor,
+                    createdAt: a.created_at,
+                  })),
+                  extraMediaUrls,
+                }
+              : i
+          )
+        );
+        setLoadedThreads((prev) => new Set(prev).add(selectedIssueId));
+      }
+    );
     return () => {
       cancelled = true;
     };
@@ -347,20 +353,68 @@ export function DashboardClient({
     }
   }
 
+  // Appends a local placeholder issue immediately — NewIssueModal.tsx no
+  // longer waits for this to resolve before letting the dev move on to
+  // the next issue ("Add Another"), and the list shouldn't sit empty in
+  // the meantime either. Reconciled with the real row (real id,
+  // sort_order, and a signed media URL) once createIssue resolves;
+  // rolled back on failure. IssueCard has no thumbnail to worry about
+  // showing prematurely — only the detail panel renders media, and by
+  // the time anyone could open it the real row has normally already
+  // landed.
   async function handleCreateIssue(input: NewIssueInput) {
     if (!currentProjectId) return;
-    const created = await createIssue({
+    const tempId = `local-${crypto.randomUUID()}`;
+    const tab: TabKey = input.sourceChannel === "User Complaint" ? "user_complaints" : "pending";
+    const optimisticIssue: Issue = {
+      id: tempId,
       projectId: currentProjectId,
+      tab,
       title: input.title,
       message: input.message,
-      category: input.category,
+      senderName: "You",
       sourceChannel: input.sourceChannel,
+      category: input.category,
       severity: input.severity,
       mediaType: input.mediaType,
-    });
-    setIssues((prev) => [toUiIssue(created), ...prev]);
-    setActiveView(created.tab);
-    setNewIssueOpen(false);
+      mediaUrl: null,
+      extraMediaUrls: [],
+      thumbnailColor: colorForId(tempId),
+      createdAt: new Date().toISOString(),
+      comments: [],
+      activity: [],
+      ticketNumber: null,
+      supportConversationId: null,
+      devLastReadAt: null,
+      sortOrder: Date.now(),
+    };
+    setIssues((prev) => [optimisticIssue, ...prev]);
+    setActiveView(tab);
+    try {
+      const created = await createIssue({
+        projectId: currentProjectId,
+        title: input.title,
+        message: input.message,
+        category: input.category,
+        sourceChannel: input.sourceChannel,
+        severity: input.severity,
+        mediaType: input.mediaType,
+        mediaPaths: input.mediaPaths,
+      });
+      let mediaUrl = created.media_url;
+      if (mediaUrl) {
+        const supabase = createClient();
+        const { data } = await supabase.storage
+          .from("whatsapp-media")
+          .createSignedUrl(mediaUrl, 60 * 60);
+        if (data?.signedUrl) mediaUrl = data.signedUrl;
+      }
+      setIssues((prev) =>
+        prev.map((i) => (i.id === tempId ? { ...toUiIssue(created), mediaUrl } : i))
+      );
+    } catch {
+      setIssues((prev) => prev.filter((i) => i.id !== tempId));
+    }
   }
 
   function handleAdd(kind: AddKind) {

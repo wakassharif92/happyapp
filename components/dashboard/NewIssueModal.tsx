@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 import type { Category, MediaType, Severity, SourceChannel } from "@/lib/board/types";
 import { CATEGORIES, SEVERITIES } from "@/lib/board/types";
-import { IconClose } from "./icons";
+import { IconClose, IconPaperclip } from "./icons";
 
 export type NewIssueInput = {
   title: string;
@@ -12,10 +13,28 @@ export type NewIssueInput = {
   sourceChannel: SourceChannel;
   severity?: Severity;
   mediaType: MediaType;
+  // Already-uploaded whatsapp-media Storage paths, in the order picked —
+  // the first becomes board_issues.media_url (the "primary" image every
+  // other code path already expects); any beyond that go into the new
+  // board_issue_media table (migration 0022). Never raw Files — the
+  // upload happens here, before onCreate is even called, so the parent
+  // never has to deal with browser File objects.
+  mediaPaths: string[];
 };
+
+type PickedImage = { file: File; previewUrl: string };
 
 const SOURCE_CHANNELS: SourceChannel[] = ["Slack", "QA", "Manual", "User Complaint"];
 
+// Opened from TopBar's "Add" popup. Two ways to submit — "Create Issue"
+// (submits and closes, the original behavior) and "Add Another" (submits
+// but keeps the sheet open with title/description/images cleared, so a
+// dev triaging a batch of issues doesn't have to reopen this each time).
+// Neither waits for the actual board_issues insert to finish before
+// clearing the form — only the image upload (a real network step this
+// component owns) is awaited; onCreate is fired and handled optimistically
+// by the caller (DashboardClient.tsx), which is what makes "Add Another"
+// feel instant rather than waiting out a full round trip each time.
 export function NewIssueModal({
   open,
   onClose,
@@ -32,11 +51,19 @@ export function NewIssueModal({
   const [category, setCategory] = useState<Category>("Frontend");
   const [sourceChannel, setSourceChannel] = useState<SourceChannel>("Manual");
   const [severity, setSeverity] = useState<Severity>("Medium");
-  const [mediaType, setMediaType] = useState<MediaType>("none");
+  const [images, setImages] = useState<PickedImage[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   if (!open) return null;
 
   const isComplaint = sourceChannel === "User Complaint";
+
+  function clearImages() {
+    images.forEach((img) => URL.revokeObjectURL(img.previewUrl));
+    setImages([]);
+  }
 
   function reset() {
     setTitle("");
@@ -44,21 +71,78 @@ export function NewIssueModal({
     setCategory("Frontend");
     setSourceChannel("Manual");
     setSeverity("Medium");
-    setMediaType("none");
+    clearImages();
   }
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!title.trim() || !message.trim()) return;
-    onCreate({
-      title: title.trim(),
-      message: message.trim(),
-      category,
-      sourceChannel,
-      severity: isComplaint ? severity : undefined,
-      mediaType,
+  // "Add Another" keeps Category/Source/Severity as-is (convenient when
+  // triaging a batch of similar issues) — only the per-issue fields
+  // clear.
+  function resetForNextEntry() {
+    setTitle("");
+    setMessage("");
+    clearImages();
+  }
+
+  function handleFilesSelected(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return;
+    const picked = Array.from(fileList).map((file) => ({
+      file,
+      previewUrl: URL.createObjectURL(file),
+    }));
+    setImages((prev) => [...prev, ...picked]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function removeImage(index: number) {
+    setImages((prev) => {
+      const target = prev[index];
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((_, i) => i !== index);
     });
-    reset();
+  }
+
+  async function uploadImages(): Promise<string[]> {
+    if (images.length === 0) return [];
+    const supabase = createClient();
+    return Promise.all(
+      images.map(async ({ file }) => {
+        const ext = file.name.split(".").pop() || "jpg";
+        const path = `issue-${crypto.randomUUID()}.${ext}`;
+        const { error: uploadError } = await supabase.storage
+          .from("whatsapp-media")
+          .upload(path, file, { contentType: file.type });
+        if (uploadError) throw uploadError;
+        return path;
+      })
+    );
+  }
+
+  async function submit(keepOpen: boolean) {
+    if (!title.trim() || !message.trim()) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const mediaPaths = await uploadImages();
+      onCreate({
+        title: title.trim(),
+        message: message.trim(),
+        category,
+        sourceChannel,
+        severity: isComplaint ? severity : undefined,
+        mediaType: mediaPaths.length > 0 ? "image" : "none",
+        mediaPaths,
+      });
+      if (keepOpen) {
+        resetForNextEntry();
+      } else {
+        reset();
+        onClose();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to upload images");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -78,7 +162,13 @@ export function NewIssueModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3 p-4">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit(false);
+          }}
+          className="flex flex-col gap-3 p-4"
+        >
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-xs font-medium text-[var(--db-fg-muted)]">Title</span>
             <input
@@ -134,39 +224,69 @@ export function NewIssueModal({
             </label>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            {isComplaint && (
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="text-xs font-medium text-[var(--db-fg-muted)]">Severity</span>
-                <select
-                  value={severity}
-                  onChange={(e) => setSeverity(e.target.value as Severity)}
-                  className="rounded-lg border border-[var(--db-border)] bg-[var(--db-bg)] px-3 py-2 text-sm text-[var(--db-fg)] outline-none focus:border-[var(--db-accent)]"
-                >
-                  {SEVERITIES.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-
+          {isComplaint && (
             <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs font-medium text-[var(--db-fg-muted)]">Attachment</span>
+              <span className="text-xs font-medium text-[var(--db-fg-muted)]">Severity</span>
               <select
-                value={mediaType}
-                onChange={(e) => setMediaType(e.target.value as MediaType)}
+                value={severity}
+                onChange={(e) => setSeverity(e.target.value as Severity)}
                 className="rounded-lg border border-[var(--db-border)] bg-[var(--db-bg)] px-3 py-2 text-sm text-[var(--db-fg)] outline-none focus:border-[var(--db-accent)]"
               >
-                <option value="none">None</option>
-                <option value="image">Image</option>
-                <option value="video">Video</option>
+                {SEVERITIES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
               </select>
             </label>
+          )}
+
+          <div className="flex flex-col gap-1.5 text-sm">
+            <span className="text-xs font-medium text-[var(--db-fg-muted)]">
+              Screenshots (optional)
+            </span>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(e) => handleFilesSelected(e.target.files)}
+              className="hidden"
+              id="new-issue-images"
+            />
+            <div className="flex flex-wrap gap-2">
+              {images.map((img, index) => (
+                <div key={img.previewUrl} className="group relative h-16 w-16 shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={img.previewUrl}
+                    alt=""
+                    className="h-full w-full rounded-lg border border-[var(--db-border)] object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeImage(index)}
+                    title="Remove"
+                    className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-white shadow-sm"
+                  >
+                    <IconClose className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex h-16 w-16 shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-[var(--db-border)] text-[var(--db-fg-subtle)] transition-colors hover:border-[var(--db-border-strong)] hover:text-[var(--db-fg-muted)]"
+              >
+                <IconPaperclip className="h-4 w-4" />
+                <span className="text-[10px] font-medium">Add</span>
+              </button>
+            </div>
           </div>
 
-          <div className="mt-2 flex justify-end gap-2">
+          {error && <p className="text-sm text-red-600">{error}</p>}
+
+          <div className="mt-2 flex flex-wrap justify-end gap-2">
             <button
               type="button"
               onClick={onClose}
@@ -175,10 +295,19 @@ export function NewIssueModal({
               Cancel
             </button>
             <button
-              type="submit"
-              className="rounded-lg bg-[var(--db-accent)] px-4 py-2 text-sm font-medium text-[var(--db-accent-fg)] shadow-sm transition-colors hover:bg-[var(--db-accent-hover)]"
+              type="button"
+              disabled={submitting || !title.trim() || !message.trim()}
+              onClick={() => submit(true)}
+              className="rounded-lg border border-[var(--db-border-strong)] px-4 py-2 text-sm font-medium text-[var(--db-fg)] transition-colors hover:bg-[var(--db-surface-hover)] disabled:opacity-50"
             >
-              Create Issue
+              Add Another
+            </button>
+            <button
+              type="submit"
+              disabled={submitting || !title.trim() || !message.trim()}
+              className="rounded-lg bg-[var(--db-accent)] px-4 py-2 text-sm font-medium text-[var(--db-accent-fg)] shadow-sm transition-colors hover:bg-[var(--db-accent-hover)] disabled:opacity-50"
+            >
+              {submitting ? "Uploading…" : "Create Issue"}
             </button>
           </div>
         </form>

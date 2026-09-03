@@ -82,6 +82,30 @@ export async function getIssueThread(
   return { comments: comments ?? [], activity: activity ?? [] };
 }
 
+// Extra images beyond an issue's primary media_url (migration 0022) —
+// lazy-loaded by IssueDetailPanel.tsx the same way getIssueThread() is,
+// resolving each private Storage path to a signed URL here (same
+// pattern as app/dashboard/page.tsx's initial-load resolution).
+export async function getIssueExtraMedia(issueId: string): Promise<string[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("board_issue_media")
+    .select("media_url")
+    .eq("issue_id", issueId)
+    .order("created_at", { ascending: true });
+  if (!data || data.length === 0) return [];
+
+  const resolved = await Promise.all(
+    data.map(async (row) => {
+      const { data: signed } = await supabase.storage
+        .from("whatsapp-media")
+        .createSignedUrl(row.media_url, 60 * 60);
+      return signed?.signedUrl ?? null;
+    })
+  );
+  return resolved.filter((url): url is string => Boolean(url));
+}
+
 export async function createIssue(input: {
   projectId: string;
   title: string;
@@ -90,6 +114,13 @@ export async function createIssue(input: {
   sourceChannel: SourceChannel;
   severity?: Severity;
   mediaType: MediaType;
+  // Already-uploaded whatsapp-media Storage paths (NewIssueModal.tsx
+  // uploads client-side before calling in) — the first becomes this
+  // issue's own media_url/media_type (the single "primary" image every
+  // other code path expects: Realtime resolution, IssueCard, Vibe
+  // Coding's PDF export); any beyond that go into board_issue_media
+  // (migration 0022) as extra attachments.
+  mediaPaths: string[];
 }) {
   const supabase = await createClient();
   const member = await getCurrentMember();
@@ -108,7 +139,8 @@ export async function createIssue(input: {
       source_channel: input.sourceChannel,
       category: input.category,
       severity: input.sourceChannel === "User Complaint" ? (input.severity ?? "Medium") : null,
-      media_type: input.mediaType,
+      media_type: input.mediaPaths.length > 0 ? "image" : input.mediaType,
+      media_url: input.mediaPaths[0] ?? null,
     })
     .select("*")
     .single();
@@ -123,6 +155,17 @@ export async function createIssue(input: {
     text: "Issue created",
     actor: member.name,
   });
+
+  const extraImages = input.mediaPaths.slice(1);
+  if (extraImages.length > 0) {
+    await supabase.from("board_issue_media").insert(
+      extraImages.map((media_url) => ({
+        company_id: member.companyId,
+        issue_id: data.id,
+        media_url,
+      }))
+    );
+  }
 
   revalidatePath("/dashboard");
   return data;
