@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentMember } from "@/lib/company";
-import type { PersonalTaskStatus } from "@/lib/types/database";
+import type { PersonalTask, PersonalTaskStatus } from "@/lib/types/database";
 
 // Private per-member (RLS: own_personal_tasks, migration 0017). Uses
 // member.userId (getCurrentMember() already resolved it internally)
@@ -61,4 +61,24 @@ export async function deletePersonalTask(id: string) {
   const supabase = await createClient();
   await supabase.from("personal_tasks").delete().eq("id", id);
   revalidatePath("/dashboard");
+}
+
+// "A pending task that isn't finished the same day moves itself to the
+// next day" — rather than a nightly cron job (no cron infra exists in
+// this app), this runs once whenever PersonalTasksPanel loads: any
+// not-done task whose task_date is already in the past gets pulled
+// forward to today. Since the panel only ever shows "as of today," one
+// jump straight to today produces the same end state the user would see
+// from a literal day-by-day rollover, with no scheduler needed. RLS
+// (own_personal_tasks) already scopes this to the caller's own rows.
+export async function rolloverOverdueTasks(todayKey: string): Promise<PersonalTask[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("personal_tasks")
+    .update({ task_date: todayKey })
+    .lt("task_date", todayKey)
+    .neq("status", "done")
+    .select("*");
+  revalidatePath("/dashboard");
+  return data ?? [];
 }

@@ -8,6 +8,7 @@ import {
   createPersonalTask,
   deletePersonalTask,
   reorderPersonalTasks,
+  rolloverOverdueTasks,
   updatePersonalTaskStatus,
 } from "@/app/dashboard/tasksActions";
 import { IconArrowDown, IconArrowUp } from "./icons";
@@ -25,6 +26,8 @@ const STATUS_LABELS: Record<PersonalTaskStatus, string> = {
 
 const STATUS_ORDER: PersonalTaskStatus[] = ["pending", "in_progress", "done"];
 
+type TaskTab = "pending" | "done";
+
 function toDateKey(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -38,34 +41,57 @@ function addDays(dateKey: string, days: number): string {
   return toDateKey(d);
 }
 
-// Day-wise personal task list — private per-member (RLS: user_id =
-// auth.uid()), company-wide (not scoped to whichever project is
-// currently selected), with an optional per-task project tag like
-// NotesPanel.tsx.
+function formatTaskDate(dateKey: string, today: string): string {
+  if (dateKey === today) return "Today";
+  if (dateKey === addDays(today, -1)) return "Yesterday";
+  if (dateKey === addDays(today, 1)) return "Tomorrow";
+  return new Date(`${dateKey}T00:00:00`).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+// Two tabs — Pending (anything not yet marked Done) and Done — rather
+// than the single-day view this used to be. A task carries its date as
+// a label on the row instead of being the thing that scopes the list,
+// since a task that rolls over (see rolloverOverdueTasks) or is
+// deliberately scheduled ahead no longer lines up with "the selected
+// day" as a concept. Private per-member (RLS: user_id = auth.uid()),
+// company-wide (not scoped to whichever project is currently selected),
+// with an optional per-task project tag like NotesPanel.tsx.
 export function PersonalTasksPanel({ projects }: { projects: Project[] }) {
   const today = toDateKey(new Date());
-  const [selectedDate, setSelectedDate] = useState(today);
+  const [activeTab, setActiveTab] = useState<TaskTab>("pending");
   const [tasks, setTasks] = useState<PersonalTask[]>([]);
   const [title, setTitle] = useState("");
   const [composerProjectId, setComposerProjectId] = useState("");
+  const [composerDate, setComposerDate] = useState(today);
 
   useEffect(() => {
     let cancelled = false;
     const supabase = createClient();
 
-    supabase
-      .from("personal_tasks")
-      .select("*")
-      .eq("task_date", selectedDate)
-      .order("sort_order", { ascending: true })
-      .then(({ data }) => {
-        if (!cancelled) setTasks(data ?? []);
-      });
+    // Pull forward anything still pending from an earlier day before
+    // loading the list, so a task that was never finished shows up under
+    // "today" instead of quietly staying stuck on a date that's passed.
+    // Computed fresh here (not the outer `today`) so this effect has no
+    // reactive dependency and only ever runs once, on mount.
+    rolloverOverdueTasks(toDateKey(new Date())).then(() => {
+      if (cancelled) return;
+      supabase
+        .from("personal_tasks")
+        .select("*")
+        .order("task_date", { ascending: true })
+        .order("sort_order", { ascending: true })
+        .then(({ data }) => {
+          if (!cancelled) setTasks(data ?? []);
+        });
+    });
 
     return () => {
       cancelled = true;
     };
-  }, [selectedDate]);
+  }, []);
 
   // Appends a local placeholder task immediately, before the server round
   // trip even starts — that's the whole fix for "adding takes time to
@@ -81,7 +107,7 @@ export function PersonalTasksPanel({ projects }: { projects: Project[] }) {
       company_id: "",
       user_id: "",
       project_id: composerProjectId || null,
-      task_date: selectedDate,
+      task_date: composerDate,
       title: trimmed,
       status: "pending",
       sort_order: Date.now(),
@@ -90,10 +116,11 @@ export function PersonalTasksPanel({ projects }: { projects: Project[] }) {
     };
     setTasks((prev) => [...prev, optimisticTask]);
     setTitle("");
+    setActiveTab("pending");
     try {
       const created = await createPersonalTask({
         title: trimmed,
-        taskDate: selectedDate,
+        taskDate: composerDate,
         projectId: composerProjectId || null,
       });
       setTasks((prev) => prev.map((t) => (t.id === tempId ? created : t)));
@@ -113,18 +140,28 @@ export function PersonalTasksPanel({ projects }: { projects: Project[] }) {
     await deletePersonalTask(id);
   }
 
-  // Swaps the task's sort_order with its neighbor in the current day's
-  // list — same mechanism as DashboardClient.tsx's handleReorder for
-  // issues. No-ops on a still-optimistic (temp id) row on either side,
-  // since it has no real sort_order to swap yet.
+  const pendingTasks = tasks.filter((t) => t.status !== "done");
+  const doneTasks = tasks.filter((t) => t.status === "done");
+  const visibleTasks = activeTab === "pending" ? pendingTasks : doneTasks;
+
+  // Swaps the task's sort_order with its neighbor in the currently
+  // visible (Pending or Done) list — same mechanism as
+  // DashboardClient.tsx's handleReorder for issues. No-ops on a still
+  // -optimistic (temp id) row on either side, since it has no real
+  // sort_order to swap yet.
   function handleReorder(id: string, direction: "up" | "down") {
-    const idx = tasks.findIndex((t) => t.id === id);
+    const idx = visibleTasks.findIndex((t) => t.id === id);
     if (idx === -1) return;
     const swapIdx = direction === "up" ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= tasks.length) return;
-    const a = tasks[idx];
-    const b = tasks[swapIdx];
+    if (swapIdx < 0 || swapIdx >= visibleTasks.length) return;
+    const a = visibleTasks[idx];
+    const b = visibleTasks[swapIdx];
+    // Only swap within the same day — the list is sorted by date first,
+    // so a sort_order swap across two different dates would get
+    // immediately undone by that ordering anyway (and reordering "today"
+    // against "tomorrow" isn't a meaningful priority swap).
     if (a.id.startsWith(TEMP_ID_PREFIX) || b.id.startsWith(TEMP_ID_PREFIX)) return;
+    if (a.task_date !== b.task_date) return;
     setTasks((prev) =>
       prev
         .map((t) => {
@@ -132,7 +169,9 @@ export function PersonalTasksPanel({ projects }: { projects: Project[] }) {
           if (t.id === b.id) return { ...t, sort_order: a.sort_order };
           return t;
         })
-        .sort((x, y) => x.sort_order - y.sort_order)
+        .sort(
+          (x, y) => x.task_date.localeCompare(y.task_date) || x.sort_order - y.sort_order
+        )
     );
     reorderPersonalTasks(a.id, b.sort_order, b.id, a.sort_order);
   }
@@ -141,34 +180,29 @@ export function PersonalTasksPanel({ projects }: { projects: Project[] }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <QuickDayButton
-          label="Yesterday"
-          active={selectedDate === addDays(today, -1)}
-          onClick={() => setSelectedDate(addDays(today, -1))}
+      <div className="flex gap-2">
+        <TaskTabButton
+          label="Pending"
+          count={pendingTasks.length}
+          active={activeTab === "pending"}
+          onClick={() => setActiveTab("pending")}
         />
-        <QuickDayButton label="Today" active={selectedDate === today} onClick={() => setSelectedDate(today)} />
-        <QuickDayButton
-          label="Tomorrow"
-          active={selectedDate === addDays(today, 1)}
-          onClick={() => setSelectedDate(addDays(today, 1))}
-        />
-        <input
-          type="date"
-          value={selectedDate}
-          onChange={(e) => setSelectedDate(e.target.value)}
-          className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-700"
+        <TaskTabButton
+          label="Done"
+          count={doneTasks.length}
+          active={activeTab === "done"}
+          onClick={() => setActiveTab("done")}
         />
       </div>
 
       <div className="card flex flex-col gap-2 p-4">
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-            placeholder="Add a task for this day…"
-            className="input flex-1"
+            placeholder="Add a task…"
+            className="input min-w-[160px] flex-1"
           />
           <select
             value={composerProjectId}
@@ -191,13 +225,33 @@ export function PersonalTasksPanel({ projects }: { projects: Project[] }) {
             Add
           </button>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <QuickDayButton
+            label="Today"
+            active={composerDate === today}
+            onClick={() => setComposerDate(today)}
+          />
+          <QuickDayButton
+            label="Tomorrow"
+            active={composerDate === addDays(today, 1)}
+            onClick={() => setComposerDate(addDays(today, 1))}
+          />
+          <input
+            type="date"
+            value={composerDate}
+            onChange={(e) => setComposerDate(e.target.value)}
+            className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-600"
+          />
+        </div>
       </div>
 
       <div className="flex flex-col gap-2">
-        {tasks.length === 0 ? (
-          <p className="text-sm text-slate-400">No tasks for this day.</p>
+        {visibleTasks.length === 0 ? (
+          <p className="text-sm text-slate-400">
+            {activeTab === "pending" ? "No pending tasks." : "Nothing done yet."}
+          </p>
         ) : (
-          tasks.map((task, index) => {
+          visibleTasks.map((task, index) => {
             const isPending = task.id.startsWith(TEMP_ID_PREFIX);
             return (
               <div
@@ -208,7 +262,9 @@ export function PersonalTasksPanel({ projects }: { projects: Project[] }) {
                   <button
                     type="button"
                     onClick={() => handleReorder(task.id, "up")}
-                    disabled={isPending || index === 0}
+                    disabled={
+                      isPending || index === 0 || visibleTasks[index - 1].task_date !== task.task_date
+                    }
                     title="Move up in priority"
                     className="flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30"
                   >
@@ -217,7 +273,11 @@ export function PersonalTasksPanel({ projects }: { projects: Project[] }) {
                   <button
                     type="button"
                     onClick={() => handleReorder(task.id, "down")}
-                    disabled={isPending || index === tasks.length - 1}
+                    disabled={
+                      isPending ||
+                      index === visibleTasks.length - 1 ||
+                      visibleTasks[index + 1].task_date !== task.task_date
+                    }
                     title="Move down in priority"
                     className="flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30"
                   >
@@ -229,9 +289,15 @@ export function PersonalTasksPanel({ projects }: { projects: Project[] }) {
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-slate-900">{task.title}</p>
-                  {task.project_id && (
-                    <p className="text-xs text-slate-400">{projectName(task.project_id)}</p>
-                  )}
+                  <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-400">
+                    <span>{formatTaskDate(task.task_date, today)}</span>
+                    {task.project_id && (
+                      <>
+                        <span>·</span>
+                        <span>{projectName(task.project_id)}</span>
+                      </>
+                    )}
+                  </p>
                 </div>
                 <select
                   value={task.status}
@@ -259,6 +325,39 @@ export function PersonalTasksPanel({ projects }: { projects: Project[] }) {
         )}
       </div>
     </div>
+  );
+}
+
+function TaskTabButton({
+  label,
+  count,
+  active,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+        active
+          ? "bg-indigo-600 text-white"
+          : "border border-slate-300 text-slate-600 hover:bg-slate-50"
+      }`}
+    >
+      {label}
+      <span
+        className={`rounded-full px-1.5 py-0.5 text-xs tabular-nums ${
+          active ? "bg-white/20" : "bg-slate-100 text-slate-500"
+        }`}
+      >
+        {count}
+      </span>
+    </button>
   );
 }
 
