@@ -409,13 +409,14 @@ Fixed globally in `next.config.ts`: `experimental.serverActions.bodySizeLimit: "
 
 `tsc`/`eslint`/`next build` all clean. **Not yet confirmed fixed against a real phone photo** — deployed, but the follow-up verification (a real oversized image through the live link) hasn't landed yet; worth confirming directly with the user's own phone test.
 
-### 41. Personal Tasks redesigned around Pending/Done tabs with auto-rollover (no migration)
-Replaces the single-day Yesterday/Today/Tomorrow view (§7-era) with two tabs, **Pending** (anything not marked Done) and **Done** — each task now shows its own date as a small label on the row instead of the date being what scopes the whole list, since a task that rolls over or is deliberately scheduled ahead no longer lines up with "the one selected day" as a concept.
+### 41. Personal Tasks redesigned around Pending/Done sections with auto-rollover (no migration)
+Replaces the single-day Yesterday/Today/Tomorrow view (§7-era) with two stacked sections, **Pending** (anything not marked Done) and **Done** — each task now shows its own date as a small label on the row instead of the date being what scopes the whole list, since a task that rolls over or is deliberately scheduled ahead no longer lines up with "the one selected day" as a concept.
 
 - **Auto-rollover**: "a pending task not finished the same day moves itself to the next day" — rather than a nightly cron (no scheduler infra exists anywhere in this app), `rolloverOverdueTasks(todayKey)` (`tasksActions.ts`) runs once whenever `PersonalTasksPanel` loads: one `UPDATE ... WHERE task_date < today AND status != 'done'` pulls every overdue pending task forward to today before the list is fetched. Since the UI only ever shows "as of today," one jump straight to today produces the same observable end state as a literal day-by-day rollover would, with zero scheduler needed.
 - **Composer** keeps a compact Today/Tomorrow + date-picker so a task can still be deliberately scheduled ahead, even though the main list is no longer filtered to a single day.
-- **Priority reordering restricted to same-day neighbors** — the list is sorted `task_date` first then `sort_order`, so a `sort_order` swap between two tasks on different dates would just get silently undone by that date-first sort on the next render; the up/down arrows are disabled across a date boundary rather than producing a swap that visibly does nothing.
-- Numbering ("1.", "2.", …) now restarts per tab, matching each tab's own filtered list.
+- **Priority reordering restricted to same-day neighbors** — each section is sorted `task_date` first then `sort_order`, so a `sort_order` swap between two tasks on different dates would just get silently undone by that date-first sort on the next render; the up/down arrows are disabled across a date boundary rather than producing a swap that visibly does nothing.
+- Numbering ("1.", "2.", …) restarts per section, matching each section's own filtered list.
+- **First shipped as two clickable tabs, then changed same-day** — the user tried it and pushed back immediately: switching tabs hid whichever list wasn't active, which felt worse than the old single view. Replaced with both sections rendered at once, Pending on top and Done below, each with its own heading and count — no click needed to see either. `renderTaskRow()` factors out the shared row markup so both sections render it identically; `handleReorder()` now takes the specific list (Pending's or Done's) explicitly rather than relying on a single "currently active" list.
 
 `tsc`/`eslint`/`next build` all clean.
 
