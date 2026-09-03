@@ -394,6 +394,14 @@ Three related fixes to `NewIssueModal.tsx`/`DashboardClient.tsx` from direct usa
 
 `tsc`/`eslint`/`next build` all clean. **Migration 0022 has not been applied yet.**
 
+### 39. Sidebar counters for Features/Suggestions/Later On/Notes; delete for issues and those three (no migration)
+Two requests bundled in one message:
+
+- **Sidebar count badges** on Features, Suggestions, Later On, and Notes, matching the badges every board tab (Pending, Done, …) already had. Those four aren't backed by `board_issues` (which is loaded upfront for every tab, so counting is just a client-side filter — see the existing `counts` useMemo) — `FeaturesPanel`/`NotesPanel` are self-contained and only fetch their own list once their own tab is actually mounted, so `DashboardClient` had no visibility into their counts at all before this. New `extraCounts` state, fetched independently (project-scoped `count: 'exact', head: true` queries per `feature_requests` kind, company-wide for `notes`) whenever `currentProjectId` changes, kept live via one Realtime subscription on `feature_requests`/`notes` — treated purely as a "something changed, refetch" signal rather than computed increment/decrement, since a Realtime `DELETE` payload doesn't reliably carry the old row's `project_id`/`kind` without turning on `REPLICA IDENTITY FULL` on these tables, and a plain refetch is cheap enough at this frequency that the schema change wasn't worth it. Merged into the same `counts` prop `Sidebar.tsx` already renders (`{...counts, ...extraCounts}`).
+- **Delete, for real, on Issues/Features/Suggestions/Later On** — none of the four could actually be permanently removed before (issues could only be *moved* between tabs; Features/Suggestions/Later On had no delete at all, only Notes and Personal Tasks did). Added `deleteIssue()` (`app/dashboard/actions.ts`) and `deleteFeatureRequest()` (`featuresActions.ts`) — both plain `DELETE` statements, no new schema; every FK from `board_issues` (comments, activity, `board_issue_media`) already cascades. "Delete Issue" now lives in the per-issue "Move to…" dropdown (`MoveToMenu.tsx`, new `onDelete` prop, red text below a divider) and as a standalone button in the detail panel (new `IconTrash`); "Delete" is a per-item text button in the shared Features/Suggestions/Later On panel, matching `NotesPanel`'s existing convention exactly — including the **no confirmation dialog**, deliberately matching that established (if slightly risky) house convention rather than introducing `window.confirm` for only some delete buttons and not others.
+
+`tsc`/`eslint`/`next build` all clean. No migration — every table involved already existed.
+
 ---
 
 ## Pending / not built
