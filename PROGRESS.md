@@ -420,11 +420,24 @@ Replaces the single-day Yesterday/Today/Tomorrow view (§7-era) with two stacked
 
 `tsc`/`eslint`/`next build` all clean.
 
+### 42. "Releases" tab — logging backend PRs and frontend builds (migration 0023)
+New sidebar tab, a log of shipped work: **Backend** or **Frontend**, with Frontend further split into **Web**/**Mobile** and Mobile into **iOS**/**Android** — filterable by the same hierarchy via cascading dropdowns (the Platform dropdown only appears once Frontend is picked, the OS dropdown only once Mobile is picked). New `releases` table (migration 0023) with a `releases_category_platform_check` constraint enforcing that exact hierarchy in the database too, not just the form — `(backend, null, null)`, `(frontend, web, null)`, or `(frontend, mobile, ios|android)` are the only valid rows.
+
+**Two ways an entry gets created**, mirroring the "human form or AI callback" pattern this app already established for Vibe Coding's AI-Fix loop (confirmed with the user via two clarifying questions before building, given how much this would've cost to redo wrong):
+- A human fills in the "Add Release" form in `ReleasesPanel.tsx` (`createRelease`, `app/dashboard/releasesActions.ts`) — title, category/platform/os, a PR or build link, and an optional description of what changed/fixed/was added.
+- An external AI coding tool (Claude Code, Codex, etc.) calls `POST /api/releases/[projectId]` directly, authenticated with the project's existing `api_token` — same "server calling in with a shared secret" pattern as `/api/vibe-coding/issues/[issueId]`, `proxy.ts` exempted the same way. Validates the category/platform/os hierarchy server-side too (a clear 400 message rather than surfacing a raw Postgres constraint violation).
+
+**"Copy AI Instructions" button** — the user specifically wanted a standing document to paste once into Claude Code's/Codex's own project (its CLAUDE.md, or just given once in a chat) rather than a per-release export: it copies a reusable prompt covering the exact curl call, field rules, and the project's real `api_token`, so from then on the AI tool logs every future PR/build here on its own without being told again — deliberately different from Vibe Coding's PDF export, which *is* meant to be regenerated per task.
+
+Also picks up the sidebar count badge (§39's `extraCounts` pattern, extended with a `releases` count query + Realtime refetch trigger) and the delete-with-no-confirmation convention (§39) for free, since both are now established patterns this feature just plugs into.
+
+`tsc`/`eslint`/`next build` all clean; the new `/api/releases/[projectId]` route verified live (returns the expected 401 with no Authorization header). **Migration 0023 has not been applied yet** — nothing in this feature has been exercised against the real database.
+
 ---
 
 ## Pending / not built
 
-- **Migrations `0017` through `0022` need to be applied** (in that order) — `0017`/`0018` appear to already be in use based on recent activity (Team Report/Feature submissions and the image-resolution bug both involved live `board_issues`/`feature_requests` rows), but `0019` (issue sort_order, §30), `0020` (the "Later On" kind, §32), `0021` (personal_tasks sort_order, §37), and `0022` (board_issue_media, §38) are confirmed not yet applied. Walk through each surface once for real once applied, including both up/down reorder arrows (issues and personal tasks), the detail-panel image lightbox (single and multi-image), adding/converting an issue to a Later On item, and attaching multiple images via the New Issue modal.
+- **Migrations `0017` through `0023` need to be applied** (in that order) — `0017`/`0018` appear to already be in use based on recent activity (Team Report/Feature submissions and the image-resolution bug both involved live `board_issues`/`feature_requests` rows), but `0019` (issue sort_order, §30), `0020` (the "Later On" kind, §32), `0021` (personal_tasks sort_order, §37), `0022` (board_issue_media, §38), and `0023` (the `releases` table, §42) are confirmed not yet applied. Walk through each surface once for real once applied, including both up/down reorder arrows (issues and personal tasks), the detail-panel image lightbox (single and multi-image), adding/converting an issue to a Later On item, attaching multiple images via the New Issue modal, and logging a release both via the form and via a real `curl` call to `/api/releases/[projectId]`.
 - **No way to regenerate a project's `api_token`** if it ever needs invalidating (§29) — would need a small admin-only action + button, likely on the Settings or Documents page.
 - The CoachPro-inspired visual redesign (Part E) hasn't been started.
 - **Full browser-level verification of the invite-claim flow is still open** — confirmed the underlying RLS/DB mechanics directly (see §27), but nobody has clicked through the actual `/invite/[token]` → Google consent → landing-in-the-right-company path in a real browser yet, since that requires a second real Google account. Worth doing once there's an actual second team member to invite for real.
