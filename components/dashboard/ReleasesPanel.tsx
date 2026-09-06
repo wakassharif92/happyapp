@@ -138,7 +138,9 @@ export function ReleasesPanel({ projectId }: { projectId: string }) {
 
 Keep this file in the project (e.g. commit it alongside CLAUDE.md/AGENTS.md as a reference) so it survives across sessions.
 
-Whenever you finish a backend PR or a frontend build/release for this project, log it in HappyApp automatically, on your own — right after the change ships. Do NOT wait to be asked, and do NOT ask the developer for permission first; just call this every time, every build, no exceptions:
+One-time setup (for the developer, not the AI): this curl call is an outbound network request, so your AI coding tool's own permission system will very likely block or ask you to approve it the first time — that is correct, expected behavior, and this document cannot and should not try to bypass it. Approve the call once, and if your tool supports a permanent allow-rule for this exact endpoint (${origin}/api/releases/${projectId}), add that rule yourself so future builds don't need re-approval every time.
+
+For the AI: whenever you finish a backend PR or a frontend build/release for this project, log it in HappyApp automatically, on your own — right after the change ships. "Don't ask first" here means the business decision only (never ask the developer "should I log this?" — the answer is always yes); it does NOT mean trying to bypass your own tool's permission/safety prompts for running the command, which are the developer's call to configure, not yours to override. Call this every time, every build, no exceptions once the developer has approved/allow-listed it:
 
 curl -X POST ${origin}/api/releases/${projectId} \\
   -H "Authorization: Bearer ${apiToken ?? "<project api token>"}" \\
