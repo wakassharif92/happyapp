@@ -31,6 +31,8 @@ export async function proxy(request: NextRequest) {
   // Section 17 (REQ-155): /api/vibe-coding/* has no session either — an
   // external AI coding tool calls in with the project's api_token, same
   // "server calling in" reasoning as the Slack/WhatsApp webhooks above.
+  // /api/releases/* is the same pattern for the Releases feature's
+  // AI-callback endpoint.
   if (
     request.nextUrl.pathname.startsWith("/api/webhooks/whatsapp") ||
     request.nextUrl.pathname.startsWith("/team-report") ||
@@ -39,7 +41,8 @@ export async function proxy(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/report/") ||
     request.nextUrl.pathname.startsWith("/auth/callback") ||
     request.nextUrl.pathname.startsWith("/invite/") ||
-    request.nextUrl.pathname.startsWith("/api/vibe-coding/")
+    request.nextUrl.pathname.startsWith("/api/vibe-coding/") ||
+    request.nextUrl.pathname.startsWith("/api/releases/")
   ) {
     return NextResponse.next({ request });
   }

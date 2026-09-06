@@ -17,6 +17,7 @@ import {
   IconLink,
   IconMegaphone,
   IconNote,
+  IconRocket,
   IconSparkles,
   IconStar,
   IconUsers,
@@ -35,6 +36,7 @@ const VIEW_ICONS: Record<BoardView, (props: { className?: string }) => React.Rea
   notes: IconNote,
   personal_tasks: IconCalendar,
   vibe_coding: IconCode,
+  releases: IconRocket,
 };
 
 export function Sidebar({

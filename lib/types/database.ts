@@ -237,6 +237,26 @@ export type BoardIssueMedia = {
   created_at: string;
 };
 
+export type ReleaseCategory = "backend" | "frontend";
+export type ReleasePlatform = "web" | "mobile";
+export type ReleaseOs = "ios" | "android";
+
+// A logged backend PR or frontend build — see migration 0023 for the
+// category/platform/os hierarchy this enforces at the DB level too.
+export type Release = {
+  id: string;
+  company_id: string;
+  project_id: string;
+  category: ReleaseCategory;
+  platform: ReleasePlatform | null;
+  os: ReleaseOs | null;
+  title: string;
+  description: string | null;
+  link: string;
+  created_by: string;
+  created_at: string;
+};
+
 export type SlackConnectionStatus = "pending_channel" | "connected" | "disconnected";
 
 export type SlackConnection = {
@@ -478,6 +498,13 @@ export type Database = {
         Insert: Partial<BoardIssueMedia> &
           Pick<BoardIssueMedia, "company_id" | "issue_id" | "media_url">;
         Update: Partial<Omit<BoardIssueMedia, "id">>;
+        Relationships: [];
+      };
+      releases: {
+        Row: Release;
+        Insert: Partial<Release> &
+          Pick<Release, "company_id" | "project_id" | "category" | "title" | "link" | "created_by">;
+        Update: Partial<Omit<Release, "id">>;
         Relationships: [];
       };
       slack_connections: {

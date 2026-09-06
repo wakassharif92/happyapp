@@ -20,6 +20,7 @@ import { FeaturesPanel } from "@/components/dashboard/FeaturesPanel";
 import { NotesPanel } from "@/components/dashboard/NotesPanel";
 import { PersonalTasksPanel } from "@/components/dashboard/PersonalTasksPanel";
 import { VibeCodingPanel } from "@/components/dashboard/VibeCodingPanel";
+import { ReleasesPanel } from "@/components/dashboard/ReleasesPanel";
 import { EmptyState } from "@/components/dashboard/EmptyState";
 import { markTicketReadByDev } from "@/app/support/[projectId]/actions";
 import { signOut } from "@/app/login/actions";
@@ -241,31 +242,41 @@ export function DashboardClient({
     const supabase = createClient();
 
     async function loadExtraCounts() {
-      const [{ count: featureCount }, { count: suggestionCount }, { count: laterOnCount }, { count: notesCount }] =
-        await Promise.all([
-          supabase
-            .from("feature_requests")
-            .select("*", { count: "exact", head: true })
-            .eq("project_id", currentProjectId)
-            .eq("kind", "feature"),
-          supabase
-            .from("feature_requests")
-            .select("*", { count: "exact", head: true })
-            .eq("project_id", currentProjectId)
-            .eq("kind", "suggestion"),
-          supabase
-            .from("feature_requests")
-            .select("*", { count: "exact", head: true })
-            .eq("project_id", currentProjectId)
-            .eq("kind", "later_on"),
-          supabase.from("notes").select("*", { count: "exact", head: true }),
-        ]);
+      const [
+        { count: featureCount },
+        { count: suggestionCount },
+        { count: laterOnCount },
+        { count: notesCount },
+        { count: releasesCount },
+      ] = await Promise.all([
+        supabase
+          .from("feature_requests")
+          .select("*", { count: "exact", head: true })
+          .eq("project_id", currentProjectId)
+          .eq("kind", "feature"),
+        supabase
+          .from("feature_requests")
+          .select("*", { count: "exact", head: true })
+          .eq("project_id", currentProjectId)
+          .eq("kind", "suggestion"),
+        supabase
+          .from("feature_requests")
+          .select("*", { count: "exact", head: true })
+          .eq("project_id", currentProjectId)
+          .eq("kind", "later_on"),
+        supabase.from("notes").select("*", { count: "exact", head: true }),
+        supabase
+          .from("releases")
+          .select("*", { count: "exact", head: true })
+          .eq("project_id", currentProjectId),
+      ]);
       if (cancelled) return;
       setExtraCounts({
         features: featureCount ?? 0,
         suggestions: suggestionCount ?? 0,
         later_on: laterOnCount ?? 0,
         notes: notesCount ?? 0,
+        releases: releasesCount ?? 0,
       });
     }
 
@@ -277,6 +288,9 @@ export function DashboardClient({
         if (!cancelled) loadExtraCounts();
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "notes" }, () => {
+        if (!cancelled) loadExtraCounts();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "releases" }, () => {
         if (!cancelled) loadExtraCounts();
       })
       .subscribe();
@@ -623,6 +637,8 @@ export function DashboardClient({
               <NotesPanel projects={initialProjects} />
             ) : activeView === "personal_tasks" ? (
               <PersonalTasksPanel projects={initialProjects} />
+            ) : activeView === "releases" ? (
+              <ReleasesPanel projectId={currentProjectId} />
             ) : (
               <VibeCodingPanel projectId={currentProjectId} issues={projectIssues} />
             )}

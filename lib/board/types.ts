@@ -100,14 +100,17 @@ export type ExtraView =
   | "later_on"
   | "notes"
   | "personal_tasks"
-  | "vibe_coding";
+  | "vibe_coding"
+  | "releases";
 export type BoardView = TabKey | ExtraView;
 
 // Vibe Coding first — the tool most tightly coupled to the AI Fix loop
-// directly above it — then ideation (Features/Suggestions), then the
-// most personal/least shared-workflow items last (Notes/Personal Tasks).
+// directly above it — then Releases (the other AI-callback-fed log),
+// then ideation (Features/Suggestions), then the most personal/least
+// shared-workflow items last (Notes/Personal Tasks).
 export const EXTRA_VIEW_ORDER: ExtraView[] = [
   "vibe_coding",
+  "releases",
   "features",
   "suggestions",
   "later_on",
@@ -125,6 +128,7 @@ export const VIEW_LABELS: Record<BoardView, string> = {
   notes: "Notes",
   personal_tasks: "Personal Tasks",
   vibe_coding: "For Vibe Coding",
+  releases: "Releases",
 };
 
 export function isTabKey(view: BoardView): view is TabKey {
