@@ -136,7 +136,9 @@ export function ReleasesPanel({ projectId }: { projectId: string }) {
       process.env.NEXT_PUBLIC_APP_URL || (typeof window !== "undefined" ? window.location.origin : "");
     return `HappyApp — Release Logging Instructions
 
-Whenever you finish a backend PR or a frontend build/release for this project, log it in HappyApp by calling:
+Keep this file in the project (e.g. commit it alongside CLAUDE.md/AGENTS.md as a reference) so it survives across sessions.
+
+Whenever you finish a backend PR or a frontend build/release for this project, log it in HappyApp automatically, on your own — right after the change ships. Do NOT wait to be asked, and do NOT ask the developer for permission first; just call this every time, every build, no exceptions:
 
 curl -X POST ${origin}/api/releases/${projectId} \\
   -H "Authorization: Bearer ${apiToken ?? "<project api token>"}" \\
@@ -157,13 +159,48 @@ Rules:
 - category "frontend", platform "mobile": os is required ("ios" or "android").
 - "createdBy" is optional (defaults to "AI").
 
-Call this once after every PR merge or shippable build, so the team can see it in HappyApp's Releases tab without you having to tell them separately.`;
+This is a standing instruction, not a one-time task — treat every future PR merge or shippable build in this project as something that must end with this call, so the team always sees it in HappyApp's Releases tab without anyone having to remind you or tell them separately.`;
   }
 
   async function handleCopyInstructions() {
     await navigator.clipboard.writeText(buildInstructionsText());
     setInstructionsCopied(true);
     setTimeout(() => setInstructionsCopied(false), 2000);
+  }
+
+  // A downloadable counterpart to "Copy AI Instructions" — meant to be
+  // saved as a real file and committed into the project's own repo
+  // (next to CLAUDE.md/AGENTS.md) as a permanent reference, rather than
+  // only living in a clipboard that gets overwritten. Rendered as plain
+  // monospace text (courier) since the content is meant to be read
+  // verbatim, same reasoning as VibeCodingPanel's curl-command blocks.
+  async function handleDownloadInstructions() {
+    const { jsPDF } = await import("jspdf");
+    const doc = new jsPDF();
+    const margin = 15;
+    const maxWidth = doc.internal.pageSize.getWidth() - margin * 2;
+    const pageHeight = doc.internal.pageSize.getHeight();
+    let y = margin;
+
+    function ensureSpace(lineHeight: number) {
+      if (y + lineHeight > pageHeight - margin) {
+        doc.addPage();
+        y = margin;
+      }
+    }
+
+    doc.setFont("courier", "normal");
+    doc.setFontSize(9.5);
+    for (const rawLine of buildInstructionsText().split("\n")) {
+      const wrapped = rawLine.length ? doc.splitTextToSize(rawLine, maxWidth) : [""];
+      for (const line of wrapped) {
+        ensureSpace(5);
+        doc.text(line, margin, y);
+        y += 5;
+      }
+    }
+
+    doc.save(`happyapp-release-instructions-${projectId}.pdf`);
   }
 
   const visible = releases.filter((r) => {
@@ -222,14 +259,24 @@ Call this once after every PR merge or shippable build, so the team can see it i
             </select>
           )}
 
-        <button
-          type="button"
-          onClick={handleCopyInstructions}
-          disabled={!apiToken}
-          className="btn-secondary ml-auto"
-        >
-          {instructionsCopied ? "Copied!" : "Copy AI Instructions"}
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleCopyInstructions}
+            disabled={!apiToken}
+            className="btn-secondary"
+          >
+            {instructionsCopied ? "Copied!" : "Copy AI Instructions"}
+          </button>
+          <button
+            type="button"
+            onClick={handleDownloadInstructions}
+            disabled={!apiToken}
+            className="btn-secondary"
+          >
+            Download Instructions
+          </button>
+        </div>
       </div>
 
       <div className="card flex flex-col gap-2 p-4">
