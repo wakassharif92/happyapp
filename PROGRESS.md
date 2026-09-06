@@ -433,6 +433,8 @@ Also picks up the sidebar count badge (§39's `extraCounts` pattern, extended wi
 
 `tsc`/`eslint`/`next build` all clean; the new `/api/releases/[projectId]` route verified live (returns the expected 401 with no Authorization header). **Migration 0023 has not been applied yet** — nothing in this feature has been exercised against the real database.
 
+**Real-world feedback, same day**: the user actually tried the instructions doc in a live Claude Code session — Claude Code's own permission system correctly blocked the outbound curl call as an unapproved network request and explicitly refused to self-authorize it, offering the user either a manual run or a permanent allow-rule to add themselves. That's the *correct* behavior of the coding tool's safety layer, not a bug in this feature, but the original instructions text read as if the AI should just push through — which is neither possible nor something the text should be encouraging. Rewrote it to say so explicitly: a one-time approval/allow-rule is the developer's call to set up (not the AI's to bypass), and narrowed the "don't ask first" line to mean the business decision only ("should I log this?" → always yes) rather than overriding the tool's own confirmation prompts. Worth remembering for any future "standing AI instruction" doc in this app: never word it in a way that implies bypassing the AI tool's own safety/permission layer, even unintentionally.
+
 ---
 
 ## Pending / not built
