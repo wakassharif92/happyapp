@@ -435,6 +435,13 @@ Also picks up the sidebar count badge (§39's `extraCounts` pattern, extended wi
 
 **Real-world feedback, same day**: the user actually tried the instructions doc in a live Claude Code session — Claude Code's own permission system correctly blocked the outbound curl call as an unapproved network request and explicitly refused to self-authorize it, offering the user either a manual run or a permanent allow-rule to add themselves. That's the *correct* behavior of the coding tool's safety layer, not a bug in this feature, but the original instructions text read as if the AI should just push through — which is neither possible nor something the text should be encouraging. Rewrote it to say so explicitly: a one-time approval/allow-rule is the developer's call to set up (not the AI's to bypass), and narrowed the "don't ask first" line to mean the business decision only ("should I log this?" → always yes) rather than overriding the tool's own confirmation prompts. Worth remembering for any future "standing AI instruction" doc in this app: never word it in a way that implies bypassing the AI tool's own safety/permission layer, even unintentionally.
 
+### 43. Voice input on the public report forms (no migration)
+New `components/MicButton.tsx` — a thin wrapper around the browser's built-in `SpeechRecognition` Web Speech API. No new dependency, no API key, no backend endpoint: the browser does the transcription itself. `lang` defaults to `navigator.language` rather than a manual picker, so "report in any language" just falls out of whatever the reporter's own phone/browser is already set to. Renders nothing when the browser has no support (Firefox, some older Safari) instead of showing a button that would just fail. Wired into the "What's wrong?" textarea on both public report forms — `/report/[projectId]` (the per-project Internal Team link) and the global `/team-report` — via an uncontrolled-textarea ref (`appendTranscript`), appending onto whatever's already typed rather than replacing it, so a reporter can type some, speak some, type more.
+
+Hit `react-hooks/set-state-in-effect` on the first pass (`setSupported` inside a plain `useEffect`) — fixed the same way this has been fixed elsewhere in the app: a lazy `useState(() => ...)` initializer instead, `typeof window !== "undefined"`-guarded since it's evaluated on both the SSR and client hydration passes of this "use client" component.
+
+`tsc`/`eslint`/`next build` all clean; verified live via Playwright against production — the mic button renders on `/report/[projectId]` and the browser reports `SpeechRecognition` support (real speech transcription itself isn't automatable this way, only that the button/API wiring is present and doesn't error).
+
 ---
 
 ## Pending / not built
