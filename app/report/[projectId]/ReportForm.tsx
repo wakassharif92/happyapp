@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
+import { MicButton } from "@/components/MicButton";
 import type { SubmitTeamReportState } from "./actions";
 
 const WHATS_WRONG_LABEL: Record<string, string> = {
@@ -22,6 +23,15 @@ export function ReportForm({
     FormData
   >(action, undefined);
   const [type, setType] = useState("issue");
+  const messageRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Appends rather than replaces — a reporter can type some, speak
+  // some, type more, without losing anything already there.
+  function appendTranscript(text: string) {
+    const el = messageRef.current;
+    if (!el) return;
+    el.value = el.value.trim() ? `${el.value.trim()} ${text}` : text;
+  }
 
   if (state?.success) {
     return (
@@ -66,13 +76,17 @@ export function ReportForm({
       </Field>
 
       <Field label={WHATS_WRONG_LABEL[type]}>
-        <textarea
-          name="message_text"
-          required
-          rows={5}
-          className="input"
-          placeholder="What happened? Steps to reproduce, if you can…"
-        />
+        <div className="flex items-start gap-2">
+          <textarea
+            ref={messageRef}
+            name="message_text"
+            required
+            rows={5}
+            className="input flex-1"
+            placeholder="What happened? Steps to reproduce, if you can… (or tap the mic to speak it)"
+          />
+          <MicButton onResult={appendTranscript} />
+        </div>
       </Field>
 
       {type === "issue" && (
