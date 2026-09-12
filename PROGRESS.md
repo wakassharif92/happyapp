@@ -442,6 +442,12 @@ Hit `react-hooks/set-state-in-effect` on the first pass (`setSupported` inside a
 
 `tsc`/`eslint`/`next build` all clean; verified live via Playwright against production — the mic button renders on `/report/[projectId]` and the browser reports `SpeechRecognition` support (real speech transcription itself isn't automatable this way, only that the button/API wiring is present and doesn't error).
 
+**Real-world feedback, two days later**: voice input "not working" in Chrome on an iPhone. Root cause is an Apple platform restriction, not a bug — every third-party browser on iOS (Chrome, Firefox, Edge, Opera) is required to run on the WebKit engine, but Apple only grants the actual on-device speech-recognition capability to Safari's own app bundle. A wrapper browser still exposes the `webkitSpeechRecognition` *constructor* (WebKit itself defines it), so the original supported-check said "yes" and rendered a normal-looking button, but `start()` failed at runtime — silently, since `onerror` just did `setListening(false)` with no message shown anywhere.
+
+Fixed in `MicButton.tsx`: `detectIosNonSafari()` sniffs the UA for `CriOS`/`FxiOS`/`EdgiOS`/`OPiOS` on an iOS device (including iPadOS 13+, which reports as `MacIntel` but has `maxTouchPoints > 1`) and adjusts the button's tooltip upfront to "Voice input works best in Safari on iOS" rather than staying silent about it; `onerror` now maps the Web Speech API's error codes (`not-allowed`, `service-not-allowed`, `network`, `no-speech`, `audio-capture`) to a real message shown under the button, with a sensible fallback for the iOS case specifically. Verified against production with a simulated Chrome-for-iOS user agent via Playwright — the iOS-aware tooltip renders correctly.
+
+**Known residual limitation, not fixed**: on a genuinely non-Safari iOS browser, voice input still won't actually work — there's no code-side fix for an Apple platform restriction. The best this app can do is tell the reporter clearly and point them at Safari, which is what this round did.
+
 ---
 
 ## Pending / not built
